@@ -8,22 +8,26 @@ datasource db {
 }
 
 model Report {
-  reportId       String    @id @map("report_id")
-  employeeEmail  String    @map("employee_email")
-  finalizedAt    DateTime  @map("finalized_at")
-  finalizedYear  Int       @map("finalized_year")
-  finalizedMonth Int       @map("finalized_month")
-  finalizedWeek  Int       @map("finalized_week")
+  reportId       String        @id @map("report_id")
+  employeeEmail  String        @map("employee_email")
+  finalizedAt    DateTime      @map("finalized_at")
+  finalizedYear  Int           @map("finalized_year")
+  finalizedMonth Int           @map("finalized_month")
+  finalizedWeek  Int           @map("finalized_week")
   header         Json?
   totals         Json?
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  status         ReportStatus @default(SUBMITTED)
+  managerEmail   String?       @map("manager_email")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
   expenses       Expense[]
   receipts       Receipt[]
+  approvals      ReportApproval[]
 
   @@map("reports")
   @@index([employeeEmail, finalizedAt], map: "reports_employee_email_finalized_at_idx")
   @@index([finalizedYear, finalizedMonth, finalizedWeek], map: "reports_period_idx")
+  @@index([status], map: "reports_status_idx")
 }
 
 model Expense {
@@ -69,10 +73,47 @@ model Receipt {
   @@index([expenseId], map: "receipts_expense_id_idx")
 }
 
+model ReportApproval {
+  id         String          @id @default(cuid())
+  reportId   String          @map("report_id")
+  stage      ApprovalStage
+  status     ApprovalStatus  @default(PENDING)
+  decidedBy  String?         @map("decided_by")
+  decidedAt  DateTime?       @map("decided_at")
+  note       String?
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+  report     Report          @relation(fields: [reportId], references: [reportId], onDelete: Cascade)
+
+  @@map("report_approvals")
+  @@unique([reportId, stage], map: "report_approvals_report_stage_key")
+  @@index([stage, status], map: "report_approvals_stage_status_idx")
+}
+
+enum ReportStatus {
+  SUBMITTED
+  MANAGER_APPROVED
+  FINANCE_APPROVED
+  REJECTED
+}
+
+enum ApprovalStage {
+  MANAGER
+  FINANCE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum AdminRole {
   CFO
   SUPER
   ANALYST
+  MANAGER
+  FINANCE
 }
 
 model AdminUser {

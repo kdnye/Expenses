@@ -36,6 +36,7 @@ export const DEFAULT_STATE = Object.freeze({
     dates: '',
     tripLength: '',
     email: '',
+    managerEmail: '',
   },
   expenses: [],
   history: [],
@@ -55,6 +56,7 @@ export const headerBindings = Object.freeze({
   field_dates: 'dates',
   field_trip_length: 'tripLength',
   field_email: 'email',
+  field_manager_email: 'managerEmail',
 });
 
 export const cloneDefaultState = () => JSON.parse(JSON.stringify(DEFAULT_STATE));

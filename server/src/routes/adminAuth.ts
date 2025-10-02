@@ -6,7 +6,8 @@ import {
   clearAdminSession,
   createAdminSession,
   ensureAdminSession,
-  requireAdmin
+  requireAdmin,
+  adminAllRoles
 } from '../middleware/adminAuth.js';
 
 const router = Router();
@@ -56,12 +57,12 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-router.post('/logout', requireAdmin(), (req, res) => {
+router.post('/logout', requireAdmin(adminAllRoles), (req, res) => {
   clearAdminSession(res);
   return res.status(204).end();
 });
 
-router.get('/session', requireAdmin(), async (req, res, next) => {
+router.get('/session', requireAdmin(adminAllRoles), async (req, res, next) => {
   try {
     const user = await ensureAdminSession(req, res);
 

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import reportsRouter from './routes/reports.js';
 import adminAuthRouter from './routes/adminAuth.js';
 import adminReportsRouter from './routes/adminReports.js';
+import adminApprovalsRouter from './routes/adminApprovals.js';
 import receiptsRouter from './routes/receipts.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -32,6 +33,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/receipts', receiptsRouter);
 app.use('/api/admin', adminAuthRouter);
 app.use('/api/admin/reports', adminReportsRouter);
+app.use('/api/admin/approvals', adminApprovalsRouter);
 
 const noCacheHeaders = {
   'Cache-Control': 'no-store',
