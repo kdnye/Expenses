@@ -71,6 +71,30 @@ const buildExpenseMetadata = (expense) => {
     metadata.policyMessages = expense.messages.map((msg) => msg.text);
   }
 
+  const receipts = Array.isArray(expense.receipts)
+    ? expense.receipts
+        .map((receipt) => {
+          if (!receipt) return null;
+          return {
+            id: receipt.id,
+            fileName: receipt.fileName,
+            contentType: receipt.contentType,
+            fileSize: receipt.fileSize,
+            storageProvider: receipt.storageProvider,
+            storageBucket: receipt.storageBucket,
+            storageKey: receipt.storageKey,
+            storageUrl: receipt.storageUrl,
+            downloadUrl: receipt.downloadUrl,
+            uploadedAt: receipt.uploadedAt,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+  if (receipts.length) {
+    metadata.receipts = receipts;
+  }
+
   return metadata;
 };
 

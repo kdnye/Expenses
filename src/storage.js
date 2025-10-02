@@ -5,7 +5,16 @@ const normalizeState = (rawState = {}) => {
   const base = cloneDefaultState();
   const state = {
     header: { ...base.header, ...(rawState.header || {}) },
-    expenses: Array.isArray(rawState.expenses) ? rawState.expenses : [],
+    expenses: Array.isArray(rawState.expenses)
+      ? rawState.expenses.map((expense) => {
+          const normalized = { ...expense };
+          if (!normalized.id) normalized.id = uuid();
+          if (!Array.isArray(normalized.receipts)) {
+            normalized.receipts = [];
+          }
+          return normalized;
+        })
+      : [],
     history: Array.isArray(rawState.history) ? rawState.history : [],
     meta: { ...base.meta, ...(rawState.meta || {}) },
   };

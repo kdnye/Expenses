@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import reportsRouter from './routes/reports.js';
 import adminAuthRouter from './routes/adminAuth.js';
 import adminReportsRouter from './routes/adminReports.js';
+import receiptsRouter from './routes/receipts.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,6 +29,7 @@ if (fs.existsSync(publicDir)) {
 }
 
 app.use('/api/reports', reportsRouter);
+app.use('/api/receipts', receiptsRouter);
 app.use('/api/admin', adminAuthRouter);
 app.use('/api/admin/reports', adminReportsRouter);
 

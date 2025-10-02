@@ -8,6 +8,7 @@ A lightweight web application for preparing Freight Services expense reports wit
 - Automatic reimbursement calculations for capped categories and mileage at the IRS rate.
 - Copy-ready text preview that mirrors the official expense form layout.
 - Offline-ready experience once the site has been loaded at least once while online.
+- Attach receipts (images or PDFs) to individual expenses and track upload status before submitting.
 
 ## Getting started
 1. Serve the project with any static HTTP server (for example `python -m http.server 8000`).

@@ -6,6 +6,12 @@ import { fmtCurrency, parseNumber, uuid } from './utils.js';
 const state = loadState();
 const expenseRows = new Map();
 const SUBMIT_ENDPOINT = '/api/reports';
+const RECEIPT_UPLOAD_ENDPOINT = '/api/receipts';
+const MAX_RECEIPT_BYTES = 10 * 1024 * 1024; // 10 MB limit per file.
+const ACCEPTED_RECEIPT_TYPES = new Set(['application/pdf']);
+const ACCEPTED_RECEIPT_PREFIXES = ['image/'];
+const pendingReceiptFiles = new Map();
+const receiptUploadState = new Map();
 let submitting = false;
 
 const elements = {
@@ -42,6 +48,94 @@ const ensureStateShape = () => {
 ensureStateShape();
 
 const findExpenseType = (value) => EXPENSE_TYPES.find((type) => type.value === value);
+
+const formatFileSize = (bytes) => {
+  const size = Number(bytes);
+  if (!Number.isFinite(size) || size <= 0) return '';
+  if (size < 1024) return `${size} B`;
+  const kb = size / 1024;
+  if (kb < 1024) return `${kb.toFixed(kb >= 10 ? 0 : 1)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(mb >= 10 ? 1 : 2)} MB`;
+};
+
+const isAllowedReceiptType = (mime) => {
+  if (!mime) return false;
+  if (ACCEPTED_RECEIPT_TYPES.has(mime)) return true;
+  return ACCEPTED_RECEIPT_PREFIXES.some((prefix) => mime.startsWith(prefix));
+};
+
+const ensureReceiptArray = (expense) => {
+  if (!Array.isArray(expense.receipts)) {
+    expense.receipts = [];
+  }
+  return expense.receipts;
+};
+
+const setReceiptStatus = (expenseId, message, status = 'info') => {
+  const refs = expenseRows.get(expenseId);
+  if (!refs?.receiptStatus) return;
+  refs.receiptStatus.textContent = message || '';
+  refs.receiptStatus.dataset.status = status;
+};
+
+const renderReceiptList = (expense) => {
+  const refs = expenseRows.get(expense.id);
+  if (!refs?.receiptList) return;
+
+  refs.receiptList.innerHTML = '';
+  const receipts = ensureReceiptArray(expense);
+  if (!receipts.length) return;
+
+  receipts.forEach((receipt) => {
+    const li = document.createElement('li');
+    const sizeLabel = formatFileSize(receipt.fileSize);
+    const segments = [receipt.fileName || 'Receipt'];
+    if (sizeLabel) segments.push(`(${sizeLabel})`);
+    if (receipt.downloadUrl) {
+      const link = document.createElement('a');
+      link.href = receipt.downloadUrl;
+      link.textContent = segments.join(' ');
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      li.appendChild(link);
+    } else {
+      li.textContent = segments.join(' ');
+    }
+    refs.receiptList.appendChild(li);
+  });
+};
+
+const updateReceiptUI = (expense) => {
+  const pending = pendingReceiptFiles.get(expense.id) || [];
+  const status = receiptUploadState.get(expense.id);
+  renderReceiptList(expense);
+
+  if (status) {
+    setReceiptStatus(expense.id, status.message, status.status);
+    return;
+  }
+
+  if (pending.length) {
+    const label = pending.length === 1 ? '1 receipt ready to upload' : `${pending.length} receipts ready to upload`;
+    setReceiptStatus(expense.id, label, 'info');
+    return;
+  }
+
+  const uploaded = ensureReceiptArray(expense);
+  if (uploaded.length) {
+    const label = uploaded.length === 1 ? '1 receipt uploaded' : `${uploaded.length} receipts uploaded`;
+    setReceiptStatus(expense.id, label, 'success');
+    return;
+  }
+
+  setReceiptStatus(expense.id, 'No receipts attached', 'info');
+};
+
+const clearReceiptStateForExpense = (expenseId) => {
+  pendingReceiptFiles.delete(expenseId);
+  receiptUploadState.delete(expenseId);
+};
 
 const createTypeOptions = (select) => {
   select.innerHTML = '';
@@ -142,6 +236,8 @@ const updateRowUI = (expense) => {
       refs.messagesList.appendChild(li);
     });
   }
+
+  updateReceiptUI(expense);
 };
 
 const updateTotals = () => {
@@ -209,6 +305,7 @@ const updatePreview = () => {
 };
 
 const persistAndRefresh = (expense, { previewOnly = false } = {}) => {
+  ensureReceiptArray(expense);
   evaluateExpense(expense);
   const index = state.expenses.findIndex((item) => item.id === expense.id);
   if (index !== -1) {
@@ -223,6 +320,7 @@ const persistAndRefresh = (expense, { previewOnly = false } = {}) => {
 };
 
 const applyExpenseType = (expense, refs) => {
+  ensureReceiptArray(expense);
   const meta = findExpenseType(expense.type) || EXPENSE_TYPES[0];
   expense.policy = meta.policy;
   expense.account = meta.account;
@@ -266,6 +364,7 @@ const removeExpense = (id) => {
   if (index === -1) return;
 
   state.expenses.splice(index, 1);
+  clearReceiptStateForExpense(id);
   const refs = expenseRows.get(id);
   if (refs) {
     refs.row.remove();
@@ -321,6 +420,9 @@ const buildRow = (expense) => {
   const removeBtn = row.querySelector('.remove-expense');
   const mealType = row.querySelector('.exp-meal-type');
   const receipt = row.querySelector('.exp-receipt');
+  const receiptInput = row.querySelector('.exp-receipt-files');
+  const receiptStatus = row.querySelector('.receipt-status');
+  const receiptList = row.querySelector('.receipt-list');
   const milesInput = row.querySelector('.exp-miles');
   const mileageRate = row.querySelector('.mileage-rate');
   const travelCategory = row.querySelector('.exp-travel-cat');
@@ -362,6 +464,9 @@ const buildRow = (expense) => {
     removeBtn,
     mealType,
     receipt,
+    receiptInput,
+    receiptStatus,
+    receiptList,
     milesInput,
     mileageRate,
     travelCategory,
@@ -372,6 +477,8 @@ const buildRow = (expense) => {
   };
 
   expenseRows.set(expense.id, refs);
+  ensureReceiptArray(expense);
+  updateReceiptUI(expense);
 
   typeSelect.addEventListener('change', () => {
     expense.type = typeSelect.value;
@@ -407,6 +514,42 @@ const buildRow = (expense) => {
   receipt.addEventListener('change', () => {
     expense.hasReceipt = receipt.checked;
     persistAndRefresh(expense);
+  });
+
+  receiptInput?.addEventListener('change', () => {
+    const files = Array.from(receiptInput.files || []);
+    receiptInput.value = '';
+    if (!files.length) return;
+
+    const invalidType = files.find((file) => !isAllowedReceiptType(file.type));
+    if (invalidType) {
+      receiptUploadState.set(expense.id, {
+        status: 'error',
+        message: `Unsupported file type: ${invalidType.type || invalidType.name}`,
+      });
+      pendingReceiptFiles.delete(expense.id);
+      updateReceiptUI(expense);
+      return;
+    }
+
+    const oversize = files.find((file) => file.size > MAX_RECEIPT_BYTES);
+    if (oversize) {
+      const maxLabel = formatFileSize(MAX_RECEIPT_BYTES);
+      receiptUploadState.set(expense.id, {
+        status: 'error',
+        message: `File exceeds ${maxLabel}: ${oversize.name}`,
+      });
+      pendingReceiptFiles.delete(expense.id);
+      updateReceiptUI(expense);
+      return;
+    }
+
+    receiptUploadState.set(expense.id, {
+      status: 'info',
+      message: files.length === 1 ? '1 receipt ready to upload' : `${files.length} receipts ready to upload`,
+    });
+    pendingReceiptFiles.set(expense.id, files);
+    updateReceiptUI(expense);
   });
 
   milesInput.addEventListener('input', () => {
@@ -457,6 +600,7 @@ const addExpense = (initial = {}) => {
     travelCategory: 'air_domestic',
     travelClass: 'coach',
     flightHours: '',
+    receipts: [],
     ...initial,
   };
 
@@ -478,6 +622,7 @@ const restoreExpenses = () => {
 
   state.expenses.forEach((expense) => {
     if (!expense.id) expense.id = uuid();
+    ensureReceiptArray(expense);
     const row = buildRow(expense);
     elements.expensesBody.appendChild(row);
     evaluateExpense(expense);
@@ -537,6 +682,8 @@ const clearExpensesUI = () => {
   });
   expenseRows.clear();
   elements.expensesBody.innerHTML = '';
+  pendingReceiptFiles.clear();
+  receiptUploadState.clear();
 };
 
 const buildHistoryEntry = (payload, responseData) => {
@@ -548,6 +695,126 @@ const buildHistoryEntry = (payload, responseData) => {
     employeeEmail: payload.employeeEmail,
     totals: payload.totals,
   };
+};
+
+const hasPendingReceiptUploads = () => {
+  for (const files of pendingReceiptFiles.values()) {
+    if (Array.isArray(files) && files.length) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const normalizeReceiptResponse = (receipt) => {
+  if (!receipt || typeof receipt !== 'object') return null;
+  return {
+    id: receipt.id,
+    reportId: receipt.reportId,
+    clientExpenseId: receipt.clientExpenseId,
+    storageProvider: receipt.storageProvider,
+    storageBucket: receipt.storageBucket,
+    storageKey: receipt.storageKey ?? receipt.objectKey ?? receipt.storageId,
+    fileName: receipt.fileName,
+    contentType: receipt.contentType,
+    fileSize: receipt.fileSize,
+    storageUrl: receipt.storageUrl,
+    downloadUrl: receipt.downloadUrl || receipt.storageUrl,
+    uploadedAt: receipt.uploadedAt ?? receipt.createdAt,
+  };
+};
+
+const mergeReceiptMetadata = (expense, uploadedReceipts) => {
+  const existing = ensureReceiptArray(expense);
+  const map = new Map(existing.map((item) => [item.id || item.storageKey || item.fileName, item]));
+  uploadedReceipts.forEach((item) => {
+    if (!item) return;
+    const key = item.id || item.storageKey || item.fileName;
+    map.set(key, { ...map.get(key), ...item });
+  });
+  expense.receipts = Array.from(map.values());
+};
+
+const uploadReceiptsForExpense = async (expense, reportId) => {
+  const files = pendingReceiptFiles.get(expense.id);
+  if (!files?.length) return;
+
+  receiptUploadState.set(expense.id, {
+    status: 'uploading',
+    message: files.length === 1 ? 'Uploading 1 receipt…' : `Uploading ${files.length} receipts…`,
+  });
+  updateReceiptUI(expense);
+
+  const formData = new FormData();
+  formData.append('reportId', reportId);
+  formData.append('expenseId', expense.id);
+  files.forEach((file) => {
+    formData.append('files', file, file.name);
+  });
+
+  let response;
+  try {
+    response = await fetch(RECEIPT_UPLOAD_ENDPOINT, {
+      method: 'POST',
+      body: formData,
+    });
+  } catch (error) {
+    receiptUploadState.set(expense.id, {
+      status: 'error',
+      message: 'Network error while uploading receipts. Try again.',
+    });
+    updateReceiptUI(expense);
+    throw error;
+  }
+
+  if (!response.ok) {
+    receiptUploadState.set(expense.id, {
+      status: 'error',
+      message: `Upload failed (status ${response.status}). Check files and retry.`,
+    });
+    updateReceiptUI(expense);
+    throw new Error(`Receipt upload failed with status ${response.status}`);
+  }
+
+  let body;
+  try {
+    body = await response.json();
+  } catch (error) {
+    body = null;
+  }
+
+  const uploadedReceipts = Array.isArray(body?.receipts)
+    ? body.receipts.map(normalizeReceiptResponse).filter(Boolean)
+    : [];
+
+  mergeReceiptMetadata(expense, uploadedReceipts);
+  pendingReceiptFiles.delete(expense.id);
+  receiptUploadState.set(expense.id, {
+    status: 'success',
+    message:
+      uploadedReceipts.length === 1
+        ? 'Receipt uploaded successfully'
+        : `${uploadedReceipts.length} receipts uploaded successfully`,
+  });
+  updateReceiptUI(expense);
+};
+
+const uploadPendingReceipts = async (reportId) => {
+  const uploads = [];
+  state.expenses.forEach((expense) => {
+    const files = pendingReceiptFiles.get(expense.id);
+    if (files?.length) {
+      uploads.push(uploadReceiptsForExpense(expense, reportId));
+    }
+  });
+
+  for (const upload of uploads) {
+    await upload;
+  }
+
+  if (uploads.length) {
+    saveState(state);
+  }
 };
 
 const finalizeSubmit = async () => {
@@ -563,17 +830,43 @@ const finalizeSubmit = async () => {
     return;
   }
 
-  const finalizedAt = new Date();
-  let payload;
-  try {
-    payload = buildReportPayload(state, { reportId: state.meta.draftId, finalizedAt });
-  } catch (error) {
-    setSubmissionFeedback(error.message || 'Unable to prepare submission. Check required fields and try again.', 'error');
+  const reportId = state.meta?.draftId;
+  if (!reportId) {
+    setSubmissionFeedback('Unable to determine report identifier. Reload and try again.', 'error');
     return;
   }
 
+  const finalizedAt = new Date();
+
   submitting = true;
   elements.finalizeSubmit?.setAttribute('disabled', 'disabled');
+  setSubmissionFeedback(
+    hasPendingReceiptUploads() ? 'Uploading receipts…' : 'Preparing submission…',
+    'info',
+  );
+
+  try {
+    if (hasPendingReceiptUploads()) {
+      await uploadPendingReceipts(reportId);
+    }
+  } catch (error) {
+    console.error('Receipt upload failed', error);
+    setSubmissionFeedback('Receipt upload failed. Check the highlighted expenses and try again.', 'error');
+    submitting = false;
+    elements.finalizeSubmit?.removeAttribute('disabled');
+    return;
+  }
+
+  let payload;
+  try {
+    payload = buildReportPayload(state, { reportId, finalizedAt });
+  } catch (error) {
+    setSubmissionFeedback(error.message || 'Unable to prepare submission. Check required fields and try again.', 'error');
+    submitting = false;
+    elements.finalizeSubmit?.removeAttribute('disabled');
+    return;
+  }
+
   setSubmissionFeedback('Submitting report…', 'info');
 
   try {
