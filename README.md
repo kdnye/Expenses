@@ -7,6 +7,7 @@ A lightweight web application for preparing Freight Services expense reports wit
 - Inline policy reminders for travel, meals, and mileage reimbursements.
 - Automatic reimbursement calculations for capped categories and mileage at the IRS rate.
 - Copy-ready text preview that mirrors the official expense form layout.
+- Offline-ready experience once the site has been loaded at least once while online.
 
 ## Getting started
 1. Serve the project with any static HTTP server (for example `python -m http.server 8000`).
@@ -27,6 +28,10 @@ docker run --rm -p 8080:80 expenses-web:local
 ```
 
 The site will be served at http://localhost:8080.
+
+## Offline support
+
+The application registers a service worker that precaches the core HTML, CSS, JavaScript, and manifest assets. Load the site once while online so the service worker can install; subsequent visits (or reloads) will continue to work even without a network connection, using the cached assets for requests.
 
 ## Google Cloud deployment pipeline
 
