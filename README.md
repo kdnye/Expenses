@@ -18,13 +18,13 @@ Local storage persistence is optional; if the browser disables access, the app s
 
 ## Container image
 
-The application can be packaged as a lightweight NGINX container by using the included `Dockerfile`.
+The application can be packaged as a lightweight NGINX container by using the included `Dockerfile`. The container listens on the `PORT` environment variable (default `8080`), making it compatible with platforms like Google Cloud Run.
 
 Build and run locally:
 
 ```bash
 docker build -t expenses-web:local .
-docker run --rm -p 8080:80 expenses-web:local
+docker run --rm -p 8080:8080 expenses-web:local
 ```
 
 The site will be served at http://localhost:8080.
