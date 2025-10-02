@@ -1,4 +1,4 @@
-export const STORAGE_KEY = 'fsi-expense-state-v1';
+export const STORAGE_KEY = 'fsi-expense-state-v2';
 export const IRS_RATE = 0.655; // 2023 IRS standard mileage rate per mile.
 
 export const MEAL_LIMITS = Object.freeze({

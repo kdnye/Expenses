@@ -91,6 +91,7 @@
               <th scope="col">Payment</th>
               <th scope="col">Amount</th>
               <th scope="col">Reimbursable</th>
+              <th scope="col">Receipts</th>
               <th scope="col">Policy notes</th>
               <th scope="col" aria-label="Remove"></th>
             </tr>
@@ -191,6 +192,15 @@
         <div class="detail" data-detail="mileage"><span class="mileage-rate"></span></div>
       </td>
       <td class="expense-reimbursable">$0.00</td>
+      <td class="receipt-cell">
+        <label class="receipt-input">
+          <span>Attach receipt</span>
+          <span class="sr-only"> for this expense</span>
+          <input type="file" class="exp-receipt-files" accept="image/*,application/pdf" multiple />
+        </label>
+        <div class="receipt-status" aria-live="polite"></div>
+        <ul class="receipt-list"></ul>
+      </td>
       <td>
         <ul class="policy-messages"></ul>
       </td>

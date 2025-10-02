@@ -5,6 +5,8 @@ import { unzipSync } from 'fflate';
 
 const adminUserFindUnique = vi.fn();
 const reportFindMany = vi.fn();
+const getReceiptStorage = vi.fn();
+const downloadUrlMock = vi.fn();
 
 vi.mock('../server/src/lib/prisma.js', () => ({
   prisma: {
@@ -15,6 +17,10 @@ vi.mock('../server/src/lib/prisma.js', () => ({
       findMany: reportFindMany
     }
   }
+}));
+
+vi.mock('../server/src/lib/receiptStorage.js', () => ({
+  getReceiptStorage,
 }));
 
 const importApp = async () => {
@@ -36,6 +42,11 @@ describe('admin authentication and exports', () => {
     process.env.ADMIN_JWT_SECRET = 'test-secret';
     adminUserFindUnique.mockReset();
     reportFindMany.mockReset();
+    getReceiptStorage.mockReset();
+    downloadUrlMock.mockReset();
+    getReceiptStorage.mockResolvedValue({
+      getDownloadUrl: downloadUrlMock,
+    });
   });
 
   it('rejects report exports without a valid session', async () => {
@@ -183,9 +194,26 @@ describe('admin authentication and exports', () => {
             incurredAt: null,
             metadata: null
           }
+        ],
+        receipts: [
+          {
+            id: 'rcpt-1',
+            reportId: 'rep-123',
+            clientExpenseId: 'exp-1',
+            expenseId: 'exp-1',
+            fileName: 'airfare.pdf',
+            contentType: 'application/pdf',
+            fileSize: 102400,
+            storageProvider: 'memory',
+            storageBucket: 'memory',
+            storageKey: 'rep-123/exp-1/airfare.pdf',
+            storageUrl: null,
+          }
         ]
       }
     ]);
+
+    downloadUrlMock.mockResolvedValue('https://example.com/receipts/rcpt-1');
 
     const loginResponse = await request(app)
       .post('/api/admin/login')
@@ -208,13 +236,18 @@ describe('admin authentication and exports', () => {
     expect(exportResponse.headers['content-type']).toBe('application/zip');
 
     const zipEntries = unzipSync(new Uint8Array(exportResponse.body));
+    expect(zipEntries['receipts.csv']).toBeDefined();
     const reportsCsv = new TextDecoder().decode(zipEntries['reports.csv']);
     const expensesCsv = new TextDecoder().decode(zipEntries['expenses.csv']);
+    const receiptsCsv = new TextDecoder().decode(zipEntries['receipts.csv']);
 
     expect(reportsCsv).toContain('rep-123');
     expect(reportsCsv).toContain('employee@example.com');
     expect(expensesCsv).toContain('exp-1');
     expect(expensesCsv).toContain('Airfare');
+    expect(receiptsCsv).toContain('rcpt-1');
+    expect(receiptsCsv).toContain('https://example.com/receipts/rcpt-1');
+    expect(downloadUrlMock).toHaveBeenCalled();
 
     const callArgs = reportFindMany.mock.calls.at(-1)?.[0];
     expect(callArgs?.where?.finalizedAt?.gte.toISOString()).toBe(new Date('2024-03-01').toISOString());

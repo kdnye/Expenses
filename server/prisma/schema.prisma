@@ -19,6 +19,7 @@ model Report {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   expenses       Expense[]
+  receipts       Receipt[]
 
   @@map("reports")
   @@index([employeeEmail, finalizedAt], map: "reports_employee_email_finalized_at_idx")
@@ -37,9 +38,35 @@ model Expense {
   metadata    Json?
   createdAt   DateTime  @default(now()) @map("created_at")
   report      Report   @relation(fields: [reportId], references: [reportId], onDelete: Cascade)
+  receipts    Receipt[]
 
   @@map("expenses")
   @@index([reportId], map: "expenses_report_id_idx")
+  @@unique([reportId, externalId], map: "expenses_report_external_id_key")
+}
+
+model Receipt {
+  id              String   @id @default(cuid())
+  reportId        String   @map("report_id")
+  clientExpenseId String   @map("client_expense_id")
+  expenseId       String?  @map("expense_id")
+  storageProvider String   @map("storage_provider")
+  storageBucket   String?  @map("storage_bucket")
+  storageKey      String   @map("storage_key")
+  storageUrl      String?  @map("storage_url")
+  fileName        String   @map("file_name")
+  contentType     String   @map("content_type")
+  fileSize        Int      @map("file_size")
+  checksum        String?  @map("checksum")
+  uploadedAt      DateTime @default(now()) @map("uploaded_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  expense         Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  report          Report   @relation(fields: [reportId], references: [reportId], onDelete: Cascade)
+
+  @@map("receipts")
+  @@index([reportId, clientExpenseId], map: "receipts_report_expense_idx")
+  @@index([expenseId], map: "receipts_expense_id_idx")
 }
 
 enum AdminRole {

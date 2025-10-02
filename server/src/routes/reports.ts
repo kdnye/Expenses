@@ -33,25 +33,59 @@ router.post('/', authenticate, async (req, res, next) => {
       : {})
   };
 
-  const expensesData: Prisma.ExpenseCreateManyInput[] = data.expenses.map(
-    (expense) => ({
-      reportId: data.reportId,
-      externalId: expense.expenseId ?? null,
-      category: expense.category,
-      description: expense.description ?? null,
-      amount: new Prisma.Decimal(expense.amount),
-      currency: expense.currency,
-      incurredAt: expense.incurredAt ?? null,
-      ...(expense.metadata
-        ? { metadata: expense.metadata as Prisma.InputJsonValue }
-        : { metadata: Prisma.JsonNull })
-    })
-  );
+  const expensesData: Prisma.ExpenseCreateManyInput[] = data.expenses.map((expense) => ({
+    reportId: data.reportId,
+    externalId: expense.expenseId ?? null,
+    category: expense.category,
+    description: expense.description ?? null,
+    amount: new Prisma.Decimal(expense.amount),
+    currency: expense.currency,
+    incurredAt: expense.incurredAt ?? null,
+    ...(expense.metadata
+      ? { metadata: expense.metadata as Prisma.InputJsonValue }
+      : { metadata: Prisma.JsonNull })
+  }));
 
   try {
     await prisma.$transaction(async (tx) => {
       await tx.report.create({ data: reportData });
       await tx.expense.createMany({ data: expensesData });
+
+      const receipts = await tx.receipt.findMany({
+        where: { reportId: data.reportId },
+        select: { id: true, clientExpenseId: true, expenseId: true },
+      });
+
+      if (receipts.length) {
+        const expenses = await tx.expense.findMany({
+          where: { reportId: data.reportId },
+          select: { id: true, externalId: true },
+        });
+
+        const expenseMap = new Map(
+          expenses
+            .filter((expense) => expense.externalId)
+            .map((expense) => [expense.externalId as string, expense.id])
+        );
+
+        await Promise.all(
+          receipts.map((receipt) => {
+            if (!receipt.clientExpenseId) {
+              return Promise.resolve(null);
+            }
+
+            const expenseId = expenseMap.get(receipt.clientExpenseId);
+            if (!expenseId || receipt.expenseId === expenseId) {
+              return Promise.resolve(null);
+            }
+
+            return tx.receipt.update({
+              where: { id: receipt.id },
+              data: { expenseId },
+            });
+          })
+        );
+      }
     });
 
     return res.status(201).json({

@@ -25,6 +25,16 @@ const sampleState = {
       policy: 'mileage',
       miles: 183.2,
       messages: [],
+      receipts: [
+        {
+          id: 'rec-1',
+          fileName: 'mileage.pdf',
+          contentType: 'application/pdf',
+          fileSize: 20480,
+          storageKey: 'reports/draft-123/exp-1/rec-1.pdf',
+          downloadUrl: 'https://example.com/receipts/rec-1',
+        },
+      ],
     },
     {
       id: 'exp-2',
@@ -83,6 +93,20 @@ describe('buildReportPayload', () => {
     });
     expect(firstExpense.incurredAt).toMatch(/^2024-05-01/);
     expect(firstExpense.metadata).toMatchObject({ payment: 'personal', policy: 'mileage' });
+    expect(firstExpense.metadata.receipts).toEqual([
+      {
+        id: 'rec-1',
+        fileName: 'mileage.pdf',
+        contentType: 'application/pdf',
+        fileSize: 20480,
+        storageProvider: undefined,
+        storageBucket: undefined,
+        storageKey: 'reports/draft-123/exp-1/rec-1.pdf',
+        storageUrl: undefined,
+        downloadUrl: 'https://example.com/receipts/rec-1',
+        uploadedAt: undefined,
+      },
+    ]);
   });
 
   it('throws when email is missing', () => {

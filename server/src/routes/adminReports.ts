@@ -2,6 +2,7 @@ import { Router } from 'express';
 import archiver from 'archiver';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { getReceiptStorage } from '../lib/receiptStorage.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 
 const router = Router();
@@ -86,10 +87,15 @@ router.get('/', requireAdmin(), async (req, res, next) => {
       include: {
         expenses: {
           orderBy: { incurredAt: 'asc' }
+        },
+        receipts: {
+          orderBy: { uploadedAt: 'asc' }
         }
       },
       orderBy: { finalizedAt: 'asc' }
     });
+
+    const storage = await getReceiptStorage();
 
     const archive = archiver('zip', { zlib: { level: 9 } });
 
@@ -134,6 +140,22 @@ router.get('/', requireAdmin(), async (req, res, next) => {
       ].join(',')
     ];
 
+    const receiptLines = [
+      [
+        'report_id',
+        'receipt_id',
+        'client_expense_id',
+        'expense_id',
+        'file_name',
+        'content_type',
+        'file_size',
+        'storage_provider',
+        'storage_bucket',
+        'storage_key',
+        'download_url'
+      ].join(',')
+    ];
+
     for (const report of reports) {
       reportLines.push(
         [
@@ -169,10 +191,39 @@ router.get('/', requireAdmin(), async (req, res, next) => {
           ].join(',')
         );
       }
+
+      for (const receipt of report.receipts) {
+        const downloadUrl = await storage.getDownloadUrl(
+          {
+            storageProvider: receipt.storageProvider,
+            storageBucket: receipt.storageBucket,
+            storageKey: receipt.storageKey,
+            storageUrl: receipt.storageUrl,
+          },
+          Number(process.env.RECEIPT_URL_TTL_SECONDS ?? 900)
+        );
+
+        receiptLines.push(
+          [
+            csvValue(report.reportId),
+            csvValue(receipt.id),
+            csvValue(receipt.clientExpenseId),
+            csvValue(receipt.expenseId ?? ''),
+            csvValue(receipt.fileName),
+            csvValue(receipt.contentType),
+            csvValue(receipt.fileSize),
+            csvValue(receipt.storageProvider),
+            csvValue(receipt.storageBucket ?? ''),
+            csvValue(receipt.storageKey),
+            csvValue(downloadUrl ?? receipt.storageUrl ?? ''),
+          ].join(',')
+        );
+      }
     }
 
     archive.append(reportLines.join('\n'), { name: 'reports.csv' });
     archive.append(expenseLines.join('\n'), { name: 'expenses.csv' });
+    archive.append(receiptLines.join('\n'), { name: 'receipts.csv' });
 
     await archive.finalize();
   } catch (error) {
