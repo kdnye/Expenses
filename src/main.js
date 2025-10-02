@@ -326,9 +326,11 @@ const applyExpenseType = (expense, refs) => {
   expense.account = meta.account;
   refs.accountCell.textContent = meta.account;
 
-  Object.entries(refs.detailBlocks).forEach(([key, block]) => {
-    if (!block) return;
-    block.hidden = meta.policy !== key;
+  Object.entries(refs.detailBlocks).forEach(([key, blocks]) => {
+    const targets = Array.isArray(blocks) ? blocks : [blocks].filter(Boolean);
+    targets.forEach((block) => {
+      block.hidden = meta.policy !== key;
+    });
   });
 
   if (meta.policy !== 'mileage') {
@@ -429,9 +431,9 @@ const buildRow = (expense) => {
   const travelClass = row.querySelector('.exp-travel-class');
   const flightHours = row.querySelector('.exp-flight-hours');
   const detailBlocks = {
-    meal: row.querySelector('[data-detail="meal"]'),
-    mileage: row.querySelector('[data-detail="mileage"]'),
-    travel: row.querySelector('[data-detail="travel"]'),
+    meal: Array.from(row.querySelectorAll('[data-detail="meal"]')),
+    mileage: Array.from(row.querySelectorAll('[data-detail="mileage"]')),
+    travel: Array.from(row.querySelectorAll('[data-detail="travel"]')),
   };
   const flightOnlyBlocks = row.querySelectorAll('[data-flight-only]');
 
