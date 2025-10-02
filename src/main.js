@@ -14,6 +14,69 @@ const pendingReceiptFiles = new Map();
 const receiptUploadState = new Map();
 let submitting = false;
 
+const hasWindow = typeof window !== 'undefined';
+const API_KEY_SESSION_STORAGE_KEY = 'fsi-expense-api-key';
+const API_KEY_PERSIST_STORAGE_KEY = 'fsi-expense-api-key-persistent';
+
+const getStorage = (type) => {
+  if (!hasWindow) return null;
+  try {
+    return window[type];
+  } catch (error) {
+    console.warn(`${type} unavailable for API key persistence`, error);
+    return null;
+  }
+};
+
+const sessionApiKeyStore = getStorage('sessionStorage');
+const persistentApiKeyStore = getStorage('localStorage');
+
+const safeStorageGet = (store, key) => {
+  if (!store) return '';
+  try {
+    return store.getItem(key) ?? '';
+  } catch (error) {
+    console.warn('Unable to read API key from storage', error);
+    return '';
+  }
+};
+
+const safeStorageSet = (store, key, value) => {
+  if (!store) return false;
+  try {
+    store.setItem(key, value);
+    return true;
+  } catch (error) {
+    console.warn('Unable to persist API key', error);
+    return false;
+  }
+};
+
+const safeStorageRemove = (store, key) => {
+  if (!store) return true;
+  try {
+    store.removeItem(key);
+    return true;
+  } catch (error) {
+    console.warn('Unable to clear stored API key', error);
+    return false;
+  }
+};
+
+let apiKey = '';
+let rememberApiKey = false;
+
+const loadStoredApiKey = () => {
+  const persisted = safeStorageGet(persistentApiKeyStore, API_KEY_PERSIST_STORAGE_KEY);
+  if (persisted) {
+    rememberApiKey = true;
+    return persisted;
+  }
+  return safeStorageGet(sessionApiKeyStore, API_KEY_SESSION_STORAGE_KEY) || '';
+};
+
+apiKey = loadStoredApiKey();
+
 const elements = {
   expensesBody: document.querySelector('#expensesBody'),
   addExpense: document.querySelector('#addExpense'),
@@ -25,6 +88,114 @@ const elements = {
   totalSubmitted: document.querySelector('#totalSubmitted'),
   totalDueEmployee: document.querySelector('#totalDueEmployee'),
   totalCompanyCard: document.querySelector('#totalCompanyCard'),
+  apiKeyInput: document.querySelector('#field_api_key'),
+  apiKeyRemember: document.querySelector('#field_api_key_remember'),
+  apiKeyStatus: document.querySelector('#apiKeyStatus'),
+};
+
+const sanitizedApiKey = () => apiKey.trim();
+
+const buildAuthorizedHeaders = (base = {}) => {
+  const headers = { ...base };
+  const key = sanitizedApiKey();
+  if (key) {
+    headers['x-api-key'] = key;
+  }
+  return headers;
+};
+
+const persistApiKey = () => {
+  const trimmed = sanitizedApiKey();
+  let success = true;
+
+  if (rememberApiKey && trimmed) {
+    success = safeStorageSet(persistentApiKeyStore, API_KEY_PERSIST_STORAGE_KEY, trimmed) && success;
+    success = safeStorageRemove(sessionApiKeyStore, API_KEY_SESSION_STORAGE_KEY) && success;
+  } else {
+    if (trimmed) {
+      success = safeStorageSet(sessionApiKeyStore, API_KEY_SESSION_STORAGE_KEY, trimmed) && success;
+    } else {
+      success = safeStorageRemove(sessionApiKeyStore, API_KEY_SESSION_STORAGE_KEY) && success;
+    }
+    success = safeStorageRemove(persistentApiKeyStore, API_KEY_PERSIST_STORAGE_KEY) && success;
+  }
+
+  return success;
+};
+
+const setApiKeyStatus = (message, variant = 'info') => {
+  if (!elements.apiKeyStatus) return;
+  elements.apiKeyStatus.textContent = message;
+  elements.apiKeyStatus.dataset.variant = variant;
+  elements.apiKeyStatus.classList.remove('success', 'error', 'info');
+  elements.apiKeyStatus.classList.add(variant);
+};
+
+const updateApiKeyStatus = ({ storageFailed = false } = {}) => {
+  if (!elements.apiKeyStatus) return;
+  const trimmed = sanitizedApiKey();
+
+  if (!trimmed) {
+    setApiKeyStatus('Add the API access key to enable uploads and submissions.', 'error');
+    return;
+  }
+
+  if (storageFailed) {
+    setApiKeyStatus('API key ready for use, but the browser cannot store it. Keep this tab open while working.', 'info');
+    return;
+  }
+
+  if (rememberApiKey) {
+    setApiKeyStatus('API key saved for this device.', 'success');
+    return;
+  }
+
+  setApiKeyStatus('API key ready for this session.', 'info');
+};
+
+const applyApiKeyDefaults = () => {
+  if (elements.apiKeyInput) {
+    elements.apiKeyInput.value = apiKey;
+  }
+  if (elements.apiKeyRemember) {
+    elements.apiKeyRemember.checked = rememberApiKey;
+    if (!persistentApiKeyStore) {
+      elements.apiKeyRemember.disabled = true;
+      const label = elements.apiKeyRemember.closest('label');
+      if (label) {
+        label.title = 'Persistent storage unavailable in this browser.';
+      }
+    }
+  }
+  updateApiKeyStatus();
+};
+
+const hasApiKey = () => Boolean(sanitizedApiKey());
+
+const initApiAccessControls = () => {
+  applyApiKeyDefaults();
+
+  elements.apiKeyInput?.addEventListener('input', (event) => {
+    apiKey = event.target.value;
+    const success = persistApiKey();
+    if (!success && rememberApiKey && elements.apiKeyRemember) {
+      rememberApiKey = false;
+      elements.apiKeyRemember.checked = false;
+    }
+    const trimmed = sanitizedApiKey();
+    updateApiKeyStatus({ storageFailed: Boolean(trimmed) && !success });
+  });
+
+  elements.apiKeyRemember?.addEventListener('change', (event) => {
+    rememberApiKey = event.target.checked;
+    const success = persistApiKey();
+    if (!success && rememberApiKey) {
+      rememberApiKey = false;
+      event.target.checked = false;
+    }
+    const trimmed = sanitizedApiKey();
+    updateApiKeyStatus({ storageFailed: Boolean(trimmed) && !success });
+  });
 };
 
 const ensureStateShape = () => {
@@ -761,6 +932,15 @@ const uploadReceiptsForExpense = async (expense, reportId) => {
   const files = pendingReceiptFiles.get(expense.id);
   if (!files?.length) return;
 
+  if (!hasApiKey()) {
+    receiptUploadState.set(expense.id, {
+      status: 'error',
+      message: 'Add the API access key before uploading receipts.',
+    });
+    updateReceiptUI(expense);
+    throw new Error('Missing API key for receipt upload');
+  }
+
   receiptUploadState.set(expense.id, {
     status: 'uploading',
     message: files.length === 1 ? 'Uploading 1 receipt…' : `Uploading ${files.length} receipts…`,
@@ -778,6 +958,7 @@ const uploadReceiptsForExpense = async (expense, reportId) => {
   try {
     response = await fetch(RECEIPT_UPLOAD_ENDPOINT, {
       method: 'POST',
+      headers: buildAuthorizedHeaders({ accept: 'application/json' }),
       body: formData,
     });
   } catch (error) {
@@ -790,9 +971,22 @@ const uploadReceiptsForExpense = async (expense, reportId) => {
   }
 
   if (!response.ok) {
+    let errorMessage = `Upload failed (status ${response.status}). Check files and retry.`;
+    if (response.status === 401) {
+      errorMessage = 'Upload failed: API key was rejected. Confirm the key and try again.';
+    } else {
+      try {
+        const errorBody = await response.json();
+        if (errorBody?.message) {
+          errorMessage = errorBody.message;
+        }
+      } catch (error) {
+        // ignore parse errors
+      }
+    }
     receiptUploadState.set(expense.id, {
       status: 'error',
-      message: `Upload failed (status ${response.status}). Check files and retry.`,
+      message: errorMessage,
     });
     updateReceiptUI(expense);
     throw new Error(`Receipt upload failed with status ${response.status}`);
@@ -860,6 +1054,11 @@ const finalizeSubmit = async () => {
 
   const finalizedAt = new Date();
 
+  if (!hasApiKey()) {
+    setSubmissionFeedback('Enter the API access key provided by Finance before submitting.', 'error');
+    return;
+  }
+
   submitting = true;
   elements.finalizeSubmit?.setAttribute('disabled', 'disabled');
   setSubmissionFeedback(
@@ -891,14 +1090,26 @@ const finalizeSubmit = async () => {
 
   setSubmissionFeedback('Submitting report…', 'info');
 
+  let submissionHandledError = false;
+
   try {
     const response = await fetch(SUBMIT_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildAuthorizedHeaders({ 'Content-Type': 'application/json', accept: 'application/json' }),
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
+      submissionHandledError = true;
+      if (response.status === 401) {
+        setSubmissionFeedback('Submission failed: API key was rejected. Confirm the key and try again.', 'error');
+      } else {
+        const errorBody = await response.json().catch(() => null);
+        const message = errorBody?.message
+          ? `Submission failed: ${errorBody.message}`
+          : `Submission failed with status ${response.status}. Try again.`;
+        setSubmissionFeedback(message, 'error');
+      }
       throw new Error(`Server responded with status ${response.status}`);
     }
 
@@ -929,7 +1140,12 @@ const finalizeSubmit = async () => {
     setSubmissionFeedback(`Report submitted successfully. ${confirmationId}`, 'success');
   } catch (error) {
     console.error('Report submission failed', error);
-    setSubmissionFeedback('Submission failed. Check your connection and try again in a few moments. Your draft is still saved.', 'error');
+    if (!submissionHandledError) {
+      setSubmissionFeedback(
+        'Submission failed. Check your connection and try again in a few moments. Your draft is still saved.',
+        'error'
+      );
+    }
     saveState(state);
   } finally {
     submitting = false;
@@ -957,6 +1173,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 const init = () => {
+  initApiAccessControls();
   initHeaderBindings();
   restoreExpenses();
   initAddButton();
