@@ -331,9 +331,17 @@ tbody tr:last-child td {
 }
 
 .copy-feedback {
-  height: 1.2rem;
+  min-height: 1.2rem;
   margin-top: 6px;
   color: var(--muted);
+}
+
+.copy-feedback.success {
+  color: #1b7a2f;
+}
+
+.copy-feedback.error {
+  color: var(--warning);
 }
 
 input.readonly {

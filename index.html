@@ -23,6 +23,9 @@
         <label>Name
           <input id="field_name" type="text" placeholder="Employee name" autocomplete="name" />
         </label>
+        <label>Email
+          <input id="field_email" type="email" placeholder="name@example.com" autocomplete="email" />
+        </label>
         <label>Department
           <input id="field_department" type="text" placeholder="Department or team" />
         </label>
@@ -120,6 +123,8 @@
       <p class="hint">Snapshot updates automatically. Copy and paste into the official form.</p>
       <textarea id="reportPreview" readonly rows="12" aria-label="Expense report preview"></textarea>
       <button id="copyPreview" type="button">Copy summary</button>
+      <button id="finalizeSubmit" type="button">Finalize &amp; submit</button>
+      <p class="copy-feedback" id="submissionFeedback" role="status" aria-live="polite"></p>
       <p class="copy-feedback" id="copyFeedback" role="status" aria-live="polite"></p>
     </section>
   </main>

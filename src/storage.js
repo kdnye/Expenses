@@ -1,4 +1,21 @@
 import { STORAGE_KEY, cloneDefaultState, DEFAULT_STATE } from './constants.js';
+import { uuid } from './utils.js';
+
+const normalizeState = (rawState = {}) => {
+  const base = cloneDefaultState();
+  const state = {
+    header: { ...base.header, ...(rawState.header || {}) },
+    expenses: Array.isArray(rawState.expenses) ? rawState.expenses : [],
+    history: Array.isArray(rawState.history) ? rawState.history : [],
+    meta: { ...base.meta, ...(rawState.meta || {}) },
+  };
+
+  if (!state.meta?.draftId) {
+    state.meta.draftId = uuid();
+  }
+
+  return state;
+};
 
 const getLocalStorage = () => {
   try {
@@ -26,21 +43,40 @@ export const loadState = () => {
     const raw = storage.getItem(STORAGE_KEY);
     if (!raw) return cloneDefaultState();
     const parsed = JSON.parse(raw);
-    return {
-      header: { ...DEFAULT_STATE.header, ...(parsed.header || {}) },
-      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
-    };
+    return normalizeState(parsed);
   } catch (error) {
     console.warn('Unable to load saved expense state', error);
-    return cloneDefaultState();
+    return normalizeState(DEFAULT_STATE);
   }
 };
 
-export const saveState = (state) => {
+export const saveState = (state, { mode = 'draft' } = {}) => {
   if (!storage) return;
+  if (!state.meta?.draftId) {
+    state.meta = { ...state.meta, draftId: uuid() };
+  }
+
+  state.meta.lastSavedMode = mode;
+  state.meta.lastSavedAt = new Date().toISOString();
+
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
     console.warn('Unable to persist expense state', error);
   }
+};
+
+export const clearDraft = () => {
+  if (!storage) return;
+  try {
+    storage.removeItem(STORAGE_KEY);
+  } catch (error) {
+    console.warn('Unable to clear saved expense state', error);
+  }
+};
+
+export const createFreshState = () => {
+  const state = cloneDefaultState();
+  state.meta.draftId = uuid();
+  return state;
 };
