@@ -13,6 +13,6 @@
     "@types/supertest": "^2.0.16",
     "fflate": "^0.8.1",
     "supertest": "^6.3.4",
-    "vitest": "^0.34.6"
+    "vitest": "^3.2.4"
   }
 }
