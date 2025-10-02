@@ -4,6 +4,7 @@ const PRECACHE_URLS = [
   '/styles.css',
   '/manifest.webmanifest',
   '/fsi-logo.png',
+  '/src/config.js',
   '/src/constants.js',
   '/src/main.js',
   '/src/storage.js',

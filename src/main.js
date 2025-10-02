@@ -2,11 +2,12 @@ import { EXPENSE_TYPES, IRS_RATE, MEAL_LIMITS, headerBindings } from './constant
 import { loadState, saveState, createFreshState } from './storage.js';
 import buildReportPayload, { calculateTotals } from './reportPayload.js';
 import { fmtCurrency, parseNumber, uuid } from './utils.js';
+import { buildApiUrl } from './config.js';
 
 const state = loadState();
 const expenseRows = new Map();
-const SUBMIT_ENDPOINT = '/api/reports';
-const RECEIPT_UPLOAD_ENDPOINT = '/api/receipts';
+const SUBMIT_ENDPOINT = buildApiUrl('/api/reports');
+const RECEIPT_UPLOAD_ENDPOINT = buildApiUrl('/api/receipts');
 const MAX_RECEIPT_BYTES = 10 * 1024 * 1024; // 10 MB limit per file.
 const ACCEPTED_RECEIPT_TYPES = new Set(['application/pdf']);
 const ACCEPTED_RECEIPT_PREFIXES = ['image/'];

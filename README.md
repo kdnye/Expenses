@@ -21,6 +21,24 @@ For a full operational handbook—including architecture notes, onboarding check
 
 Local storage persistence is optional; if the browser disables access, the app still functions without saving state between sessions.
 
+## Configuring the API endpoint
+
+By default the web client sends receipt uploads and report submissions to the same origin it was served from (for example `/api/reports`).
+When the API is hosted on a different domain or behind a reverse proxy prefix, provide the target base URL through one of the following options:
+
+- Add a meta tag to `index.html` (and `admin.html` for the finance console):
+  ```html
+  <meta name="fsi-expenses-api-base" content="https://expenses-api.example.com" />
+  ```
+- Define a global configuration object before loading `src/main.js` or `src/admin.js`:
+  ```html
+  <script>
+    window.__FSI_EXPENSES_CONFIG__ = { apiBaseUrl: 'https://expenses-api.example.com' };
+  </script>
+  ```
+
+Relative values such as `/internal/expenses-api` are also supported. If no configuration is supplied the app continues to use same-origin requests.
+
 ## Container image
 
 The application can be packaged as a lightweight NGINX container by using the included `Dockerfile`. The container listens on the `PORT` environment variable (default `8080`), making it compatible with platforms like Google Cloud Run.
