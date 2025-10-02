@@ -154,6 +154,48 @@ const updateFlightFieldsVisibility = (expense, refs) => {
   });
 };
 
+const syncPolicyDetailUI = (expense, refs) => {
+  const meta = findExpenseType(expense.type) || EXPENSE_TYPES[0];
+  const policy = expense.policy || meta.policy;
+  expense.policy = policy;
+
+  Object.entries(refs.detailBlocks).forEach(([key, blocks]) => {
+    const targets = Array.isArray(blocks) ? blocks : [blocks].filter(Boolean);
+    targets.forEach((block) => {
+      block.hidden = policy !== key;
+    });
+  });
+
+  if (policy === 'travel') {
+    updateFlightFieldsVisibility(expense, refs);
+  } else {
+    refs.flightOnlyBlocks.forEach((block) => {
+      block.style.display = 'none';
+    });
+  }
+
+  const isMileage = policy === 'mileage';
+  if (isMileage) {
+    refs.amountInput.setAttribute('readonly', 'readonly');
+    refs.amountInput.classList.add('readonly');
+    const miles = parseNumber(expense.miles);
+    expense.miles = miles;
+    if (refs.milesInput) {
+      refs.milesInput.value = miles ? miles : '';
+    }
+    const amount = miles * IRS_RATE;
+    expense.amount = amount;
+    refs.amountInput.value = amount ? amount.toFixed(2) : '';
+  } else {
+    refs.amountInput.removeAttribute('readonly');
+    refs.amountInput.classList.remove('readonly');
+  }
+
+  if (refs.mileageRate) {
+    refs.mileageRate.hidden = !isMileage;
+  }
+};
+
 const evaluateExpense = (expense) => {
   const messages = [];
   let reimbursable = parseNumber(expense.amount);
@@ -222,10 +264,8 @@ const updateRowUI = (expense) => {
   const refs = expenseRows.get(expense.id);
   if (!refs) return;
 
+  syncPolicyDetailUI(expense, refs);
   refs.reimbCell.textContent = fmtCurrency(expense.reimbursable || 0);
-  if (expense.policy === 'mileage') {
-    refs.amountInput.value = expense.amount ? expense.amount.toFixed(2) : '';
-  }
 
   refs.messagesList.innerHTML = '';
   if (expense.messages?.length) {
@@ -326,27 +366,6 @@ const applyExpenseType = (expense, refs) => {
   expense.account = meta.account;
   refs.accountCell.textContent = meta.account;
 
-  Object.entries(refs.detailBlocks).forEach(([key, blocks]) => {
-    const targets = Array.isArray(blocks) ? blocks : [blocks].filter(Boolean);
-    targets.forEach((block) => {
-      block.hidden = meta.policy !== key;
-    });
-  });
-
-  if (meta.policy !== 'mileage') {
-    refs.amountInput.removeAttribute('readonly');
-    refs.amountInput.classList.remove('readonly');
-  }
-
-  if (meta.policy === 'mileage') {
-    refs.amountInput.setAttribute('readonly', 'readonly');
-    refs.amountInput.classList.add('readonly');
-    if (!expense.miles) expense.miles = 0;
-    refs.milesInput.value = expense.miles || '';
-    expense.amount = expense.miles * IRS_RATE;
-    refs.amountInput.value = expense.amount ? expense.amount.toFixed(2) : '';
-  }
-
   if (meta.policy !== 'meal') {
     expense.mealType = expense.mealType || 'dinner';
   }
@@ -355,8 +374,9 @@ const applyExpenseType = (expense, refs) => {
     const defaultCategory = meta.travelDefault || 'air_domestic';
     expense.travelCategory = expense.travelCategory || defaultCategory;
     refs.travelCategory.value = expense.travelCategory;
-    updateFlightFieldsVisibility(expense, refs);
   }
+
+  syncPolicyDetailUI(expense, refs);
 
   persistAndRefresh(expense);
 };
