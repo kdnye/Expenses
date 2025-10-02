@@ -1,6 +1,5 @@
-const CACHE_VERSION = 'expenses-cache-v2';
+const CACHE_VERSION = 'expenses-cache-v3';
 const PRECACHE_URLS = [
-  '/',
   '/index.html',
   '/styles.css',
   '/manifest.webmanifest',
@@ -41,6 +40,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const isNavigationRequest = event.request.mode === 'navigate';
+
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
@@ -52,10 +53,12 @@ self.addEventListener('fetch', (event) => {
           return networkResponse;
         }
 
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_VERSION).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
+        if (!isNavigationRequest) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_VERSION).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
 
         return networkResponse;
       })
@@ -65,7 +68,7 @@ self.addEventListener('fetch', (event) => {
           return cachedResponse;
         }
 
-        if (event.request.mode === 'navigate') {
+        if (isNavigationRequest) {
           const fallback = await caches.match('/index.html');
           if (fallback) {
             return fallback;

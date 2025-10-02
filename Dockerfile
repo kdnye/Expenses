@@ -11,8 +11,10 @@ RUN chmod +x /docker-entrypoint.d/10-configure-nginx.sh
 
 # Copy static assets into the nginx public directory.
 COPY index.html /usr/share/nginx/html/index.html
+COPY admin.html /usr/share/nginx/html/admin.html
 COPY styles.css /usr/share/nginx/html/styles.css
 COPY manifest.webmanifest /usr/share/nginx/html/manifest.webmanifest
+COPY fsi-logo.png /usr/share/nginx/html/fsi-logo.png
 COPY src /usr/share/nginx/html/src
 COPY service-worker.js /usr/share/nginx/html/service-worker.js
 
