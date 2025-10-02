@@ -1,9 +1,10 @@
-const CACHE_VERSION = 'expenses-cache-v1';
+const CACHE_VERSION = 'expenses-cache-v2';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/styles.css',
   '/manifest.webmanifest',
+  '/fsi-logo.png',
   '/src/constants.js',
   '/src/main.js',
   '/src/storage.js',
