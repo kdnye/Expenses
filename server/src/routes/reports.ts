@@ -38,7 +38,9 @@ router.post('/', authenticate, async (req, res, next) => {
     externalId: expense.expenseId ?? null,
     category: expense.category,
     description: expense.description ?? null,
-    amount: new Prisma.Decimal(expense.amount),
+    amount: typeof expense.amount === 'number'
+      ? expense.amount.toString()
+      : expense.amount,
     currency: expense.currency,
     incurredAt: expense.incurredAt ?? null,
     ...(expense.metadata

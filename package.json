@@ -1,7 +1,11 @@
 {
   "name": "fsi-expense-report",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
+  "workspaces": [
+    "server"
+  ],
   "scripts": {
     "test": "vitest"
   },
