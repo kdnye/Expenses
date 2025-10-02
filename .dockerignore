@@ -1,0 +1,11 @@
+# Exclude Git metadata and GitHub workflows
+.git
+.github
+
+# Exclude local development files
+node_modules
+npm-debug.log
+
+# Exclude macOS/Linux temporary files
+.DS_Store
+*.swp
