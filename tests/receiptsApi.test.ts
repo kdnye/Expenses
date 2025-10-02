@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { createHash } from 'node:crypto';
 
@@ -13,10 +13,44 @@ vi.mock('../server/src/lib/prisma.js', () => ({
   },
 }));
 
-vi.mock('../server/src/lib/receiptStorage.js', () => ({
-  getReceiptStorage: vi.fn(),
-  RECEIPT_ALLOWED_MIME_PREFIXES: ['image/'],
-  RECEIPT_ALLOWED_MIME_TYPES: new Set(['application/pdf']),
+const driveFilesCreate = vi.fn();
+const driveFilesGet = vi.fn();
+const googleAuthAccessTokenMock = vi.fn();
+
+vi.mock('../server/src/lib/receiptStorage.js', async () => {
+  const actual = await vi.importActual<typeof import('../server/src/lib/receiptStorage.js')>(
+    '../server/src/lib/receiptStorage.js'
+  );
+  return {
+    ...actual,
+    getReceiptStorage: vi.fn(),
+    RECEIPT_ALLOWED_MIME_PREFIXES: ['image/'],
+    RECEIPT_ALLOWED_MIME_TYPES: new Set(['application/pdf']),
+  };
+});
+
+vi.mock('@googleapis/drive', () => ({
+  google: {
+    auth: {
+      GoogleAuth: class {
+        options;
+
+        constructor(options) {
+          this.options = options;
+        }
+
+        async getAccessToken() {
+          return googleAuthAccessTokenMock();
+        }
+      }
+    },
+    drive: () => ({
+      files: {
+        create: driveFilesCreate,
+        get: driveFilesGet,
+      },
+    }),
+  },
 }));
 
 type ReceiptRecord = {
@@ -38,6 +72,12 @@ type ReceiptRecord = {
 };
 
 const { getReceiptStorage } = await import('../server/src/lib/receiptStorage.js');
+const {
+  getReceiptStorage: getReceiptStorageActual,
+  resetReceiptStorageCache,
+} = await vi.importActual<typeof import('../server/src/lib/receiptStorage.js')>(
+  '../server/src/lib/receiptStorage.js'
+);
 
 const importApp = async () => {
   const module = await import('../server/src/app.ts');
@@ -149,5 +189,86 @@ describe('receipt uploads', () => {
       expect.objectContaining({ storageKey: 'rep-1/exp-1/file.pdf' }),
       expect.any(Number)
     );
+  });
+});
+
+describe('google drive receipt storage provider', () => {
+  beforeEach(() => {
+    driveFilesCreate.mockReset();
+    driveFilesGet.mockReset();
+    googleAuthAccessTokenMock.mockReset();
+    googleAuthAccessTokenMock.mockResolvedValue('drive-token');
+    process.env.RECEIPT_STORAGE_PROVIDER = 'gdrive';
+    process.env.GDRIVE_FOLDER_ID = 'folder-123';
+    process.env.GDRIVE_CREDENTIALS_JSON = JSON.stringify({
+      type: 'service_account',
+      client_email: 'svc@example.com',
+      private_key: '-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\n',
+    });
+  });
+
+  afterEach(() => {
+    delete process.env.RECEIPT_STORAGE_PROVIDER;
+    delete process.env.GDRIVE_FOLDER_ID;
+    delete process.env.GDRIVE_CREDENTIALS_JSON;
+  });
+
+  it('uploads receipts to Google Drive and returns download URLs', async () => {
+    driveFilesCreate.mockResolvedValue({
+      data: {
+        id: 'drive-file-1',
+        webViewLink: 'https://drive.google.com/file/d/drive-file-1/view',
+        webContentLink: 'https://drive.google.com/uc?id=drive-file-1',
+      },
+    });
+
+    await resetReceiptStorageCache();
+    const storage = await getReceiptStorageActual();
+
+    const buffer = Buffer.from('test drive upload');
+    const stored = await storage.upload({
+      reportId: 'rep-9',
+      expenseId: 'exp-2',
+      fileName: 'receipt.png',
+      contentType: 'image/png',
+      data: buffer,
+    });
+
+    expect(driveFilesCreate).toHaveBeenCalledTimes(1);
+    const createArgs = driveFilesCreate.mock.calls[0]?.[0];
+    expect(createArgs?.requestBody?.parents).toEqual(['folder-123']);
+    expect(createArgs?.requestBody?.mimeType).toBe('image/png');
+    expect(createArgs?.media?.mimeType).toBe('image/png');
+    expect(typeof createArgs?.media?.body?.pipe).toBe('function');
+
+    expect(stored).toMatchObject({
+      storageProvider: 'gdrive',
+      storageBucket: 'folder-123',
+      storageKey: 'drive-file-1',
+      storageUrl: 'https://drive.google.com/file/d/drive-file-1/view',
+    });
+
+    const downloadUrl = await storage.getDownloadUrl(stored, 300);
+    expect(downloadUrl).toBe(
+      'https://www.googleapis.com/drive/v3/files/drive-file-1?alt=media&access_token=drive-token'
+    );
+    expect(googleAuthAccessTokenMock).toHaveBeenCalled();
+  });
+
+  it('propagates Google Drive upload errors', async () => {
+    driveFilesCreate.mockRejectedValue(new Error('drive upload failed'));
+
+    await resetReceiptStorageCache();
+    const storage = await getReceiptStorageActual();
+
+    await expect(
+      storage.upload({
+        reportId: 'rep-10',
+        expenseId: 'exp-3',
+        fileName: 'receipt.pdf',
+        contentType: 'application/pdf',
+        data: Buffer.from('pdf'),
+      })
+    ).rejects.toThrow('drive upload failed');
   });
 });
