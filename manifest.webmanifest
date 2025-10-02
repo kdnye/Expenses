@@ -1,0 +1,9 @@
+{
+  "name": "FSI Expense Report Builder",
+  "short_name": "FSI Expenses",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0b1120",
+  "theme_color": "#0f172a",
+  "icons": []
+}
