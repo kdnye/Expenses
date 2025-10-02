@@ -103,6 +103,9 @@ const sanitizeHeader = (header = {}) => {
   if (cleaned.email) {
     cleaned.email = cleaned.email.trim();
   }
+  if (cleaned.managerEmail) {
+    cleaned.managerEmail = cleaned.managerEmail.trim().toLowerCase();
+  }
   return cleaned;
 };
 
@@ -111,6 +114,15 @@ export const buildReportPayload = (state, { reportId, finalizedAt }) => {
   const email = state.header?.email?.trim();
   if (!email) {
     throw new Error('Employee email is required before submitting.');
+  }
+
+  const managerEmail = state.header?.managerEmail?.trim();
+  if (!managerEmail) {
+    throw new Error('Manager email is required before submitting.');
+  }
+
+  if (!managerEmail.includes('@') || !managerEmail.includes('.')) {
+    throw new Error('Enter a valid manager email before submitting.');
   }
 
   if (!reportId) {
@@ -154,11 +166,13 @@ export const buildReportPayload = (state, { reportId, finalizedAt }) => {
     week: getIsoWeek(finalizedDate),
   };
 
+  const header = sanitizeHeader(state.header);
+
   return {
     reportId,
     employeeEmail: email,
     finalizedAt: finalizedDate.toISOString(),
-    header: sanitizeHeader(state.header),
+    header,
     totals,
     period,
     expenses: expensesPayload,

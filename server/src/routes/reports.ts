@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { Prisma } from '@prisma/client';
+import { ApprovalStage, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { reportSchema } from '../validators/reportSchema.js';
@@ -18,6 +18,19 @@ router.post('/', authenticate, async (req, res, next) => {
 
   const data = parsed.data;
 
+  const rawHeader = (data.header ?? {}) as Record<string, unknown>;
+  const managerEmailValue = typeof rawHeader.managerEmail === 'string' ? rawHeader.managerEmail : '';
+  const managerEmail = managerEmailValue.trim().toLowerCase();
+
+  if (!managerEmail) {
+    return res.status(400).json({ message: 'Manager email is required for approvals.' });
+  }
+
+  const normalizedHeader = {
+    ...rawHeader,
+    managerEmail
+  };
+
   const reportData: Prisma.ReportCreateInput = {
     reportId: data.reportId,
     employeeEmail: data.employeeEmail.toLowerCase(),
@@ -25,9 +38,8 @@ router.post('/', authenticate, async (req, res, next) => {
     finalizedYear: data.period.year,
     finalizedMonth: data.period.month,
     finalizedWeek: data.period.week,
-    ...(data.header
-      ? { header: data.header as Prisma.InputJsonValue }
-      : {}),
+    managerEmail,
+    header: normalizedHeader as Prisma.InputJsonValue,
     ...(data.totals
       ? { totals: data.totals as Prisma.InputJsonValue }
       : {})
@@ -52,6 +64,12 @@ router.post('/', authenticate, async (req, res, next) => {
     await prisma.$transaction(async (tx) => {
       await tx.report.create({ data: reportData });
       await tx.expense.createMany({ data: expensesData });
+      await tx.reportApproval.createMany({
+        data: [
+          { reportId: data.reportId, stage: ApprovalStage.MANAGER },
+          { reportId: data.reportId, stage: ApprovalStage.FINANCE }
+        ]
+      });
 
       const receipts = await tx.receipt.findMany({
         where: { reportId: data.reportId },

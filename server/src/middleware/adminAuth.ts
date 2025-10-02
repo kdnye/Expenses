@@ -7,7 +7,9 @@ export type SessionUser = Pick<AdminUser, 'id' | 'username' | 'role'>;
 
 const AUTH_COOKIE_NAME = 'admin_session';
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 8; // 8 hours
-const allowedRoles: AdminRole[] = ['CFO', 'SUPER'];
+const financeRoles: AdminRole[] = ['CFO', 'SUPER', 'FINANCE'];
+const approvalRoles: AdminRole[] = Array.from(new Set<AdminRole>(['MANAGER', 'ANALYST', ...financeRoles]));
+const allRoles: AdminRole[] = approvalRoles;
 
 declare module 'express-serve-static-core' {
   interface Request {
@@ -96,7 +98,7 @@ export async function ensureAdminSession(
 }
 
 export function requireAdmin(
-  roles: AdminRole[] = allowedRoles
+  roles: AdminRole[] = financeRoles
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -132,4 +134,6 @@ export function clearAdminSession(res: Response) {
 }
 
 export const adminSessionCookieName = AUTH_COOKIE_NAME;
-export const adminAllowedRoles = allowedRoles;
+export const adminFinanceRoles = financeRoles;
+export const adminApprovalRoles = approvalRoles;
+export const adminAllRoles = allRoles;

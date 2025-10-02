@@ -473,6 +473,7 @@ const updatePreview = () => {
   lines.push('Expense report');
   lines.push(`Name: ${header.name || ''}`);
   lines.push(`Email: ${header.email || ''}`);
+  lines.push(`Manager email: ${header.managerEmail || ''}`);
   lines.push(`Department: ${header.department || ''}`);
   lines.push(`Expense focus: ${header.focus || ''}`);
   lines.push(`Purpose: ${header.purpose || ''}`);

@@ -153,6 +153,131 @@
     .hidden {
       display: none !important;
     }
+
+    .approvals-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      align-items: flex-end;
+    }
+
+    .approvals-controls label.inline {
+      flex: 1;
+      min-width: 160px;
+    }
+
+    .approvals-controls button {
+      align-self: flex-start;
+    }
+
+    .approvals-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .approval-item {
+      border: 1px solid #e4e8f2;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      background: #f9fbff;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .approval-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .approval-header h3 {
+      margin: 0;
+      font-size: 1.05rem;
+    }
+
+    .approval-header p {
+      margin: 0;
+      color: #52606d;
+      font-size: 0.9rem;
+    }
+
+    .approval-meta {
+      display: grid;
+      gap: 0.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    }
+
+    .approval-meta dt {
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: #334155;
+    }
+
+    .approval-meta dd {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #475569;
+    }
+
+    .approval-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .approval-actions button[data-approval-action="reject"] {
+      background: #fff;
+      color: #1f2933;
+      border: 1px solid #d0d7e2;
+    }
+
+    .approval-actions button[data-approval-action="reject"]:hover {
+      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .status-badge {
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      align-self: flex-start;
+    }
+
+    .status-pending {
+      background: rgba(37, 99, 235, 0.12);
+      color: #1d4ed8;
+    }
+
+    .status-approved {
+      background: rgba(22, 163, 74, 0.12);
+      color: #15803d;
+    }
+
+    .status-rejected {
+      background: rgba(220, 38, 38, 0.12);
+      color: #b91c1c;
+    }
+
+    .approval-expenses summary {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .approval-expenses ul {
+      margin: 0.5rem 0 0;
+      padding-left: 1.25rem;
+      color: #475569;
+      font-size: 0.9rem;
+    }
+
+    .approval-expenses li + li {
+      margin-top: 0.25rem;
+    }
   </style>
 </head>
 <body>
@@ -176,6 +301,27 @@
         </div>
       </form>
       <div id="loginStatus" class="status hidden" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card hidden" id="approvalsCard">
+      <h2>Expense approvals</h2>
+      <p class="hint" id="approvalsHint">Review submitted reports, confirm policy compliance, and record your decision.</p>
+      <div class="approvals-controls">
+        <label class="inline">Stage
+          <select id="approvalStage"></select>
+        </label>
+        <label class="inline">Status
+          <select id="approvalStatus">
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </label>
+        <button type="button" id="refreshApprovals">Refresh</button>
+      </div>
+      <div id="approvalsStatus" class="status hidden" role="status" aria-live="polite"></div>
+      <div id="approvalsList" class="approvals-list"></div>
+      <p class="hint hidden" id="approvalsEmpty">No reports match the selected filters.</p>
     </section>
 
     <section class="card hidden" id="exportCard">

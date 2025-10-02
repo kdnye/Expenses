@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import archiver from 'archiver';
 import { z } from 'zod';
+import { ApprovalStage, ReportStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { getReceiptStorage } from '../lib/receiptStorage.js';
-import { requireAdmin } from '../middleware/adminAuth.js';
+import { requireAdmin, adminFinanceRoles } from '../middleware/adminAuth.js';
 
 const router = Router();
 
@@ -57,7 +58,7 @@ function csvValue(value: unknown): string {
   return stringValue;
 }
 
-router.get('/', requireAdmin(), async (req, res, next) => {
+router.get('/', requireAdmin(adminFinanceRoles), async (req, res, next) => {
   let parsed;
   try {
     parsed = querySchema.parse(req.query);
@@ -76,6 +77,7 @@ router.get('/', requireAdmin(), async (req, res, next) => {
           gte: parsed.start,
           lte: parsed.end
         },
+        status: ReportStatus.FINANCE_APPROVED,
         ...(parsed.employees
           ? {
               employeeEmail: {
@@ -90,7 +92,8 @@ router.get('/', requireAdmin(), async (req, res, next) => {
         },
         receipts: {
           orderBy: { uploadedAt: 'asc' }
-        }
+        },
+        approvals: true
       },
       orderBy: { finalizedAt: 'asc' }
     });
@@ -122,7 +125,17 @@ router.get('/', requireAdmin(), async (req, res, next) => {
         'finalized_month',
         'finalized_week',
         'header_json',
-        'totals_json'
+        'totals_json',
+        'status',
+        'manager_email',
+        'manager_status',
+        'manager_decided_by',
+        'manager_decided_at',
+        'manager_note',
+        'finance_status',
+        'finance_decided_by',
+        'finance_decided_at',
+        'finance_note'
       ].join(',')
     ];
 
@@ -156,7 +169,13 @@ router.get('/', requireAdmin(), async (req, res, next) => {
       ].join(',')
     ];
 
+    const approvalByStage = (stage: ApprovalStage, report: typeof reports[number]) =>
+      report.approvals.find((approval) => approval.stage === stage);
+
     for (const report of reports) {
+      const managerApproval = approvalByStage(ApprovalStage.MANAGER, report);
+      const financeApproval = approvalByStage(ApprovalStage.FINANCE, report);
+
       reportLines.push(
         [
           csvValue(report.reportId),
@@ -166,7 +185,17 @@ router.get('/', requireAdmin(), async (req, res, next) => {
           csvValue(report.finalizedMonth),
           csvValue(report.finalizedWeek),
           csvValue(report.header ? JSON.stringify(report.header) : ''),
-          csvValue(report.totals ? JSON.stringify(report.totals) : '')
+          csvValue(report.totals ? JSON.stringify(report.totals) : ''),
+          csvValue(report.status),
+          csvValue(report.managerEmail ?? ''),
+          csvValue(managerApproval?.status ?? ''),
+          csvValue(managerApproval?.decidedBy ?? ''),
+          csvValue(managerApproval?.decidedAt ? managerApproval.decidedAt.toISOString() : ''),
+          csvValue(managerApproval?.note ?? ''),
+          csvValue(financeApproval?.status ?? ''),
+          csvValue(financeApproval?.decidedBy ?? ''),
+          csvValue(financeApproval?.decidedAt ? financeApproval.decidedAt.toISOString() : ''),
+          csvValue(financeApproval?.note ?? '')
         ].join(',')
       );
 

@@ -26,6 +26,9 @@
         <label>Email
           <input id="field_email" type="email" placeholder="name@example.com" autocomplete="email" />
         </label>
+        <label>Manager email
+          <input id="field_manager_email" type="email" placeholder="manager@example.com" autocomplete="email" />
+        </label>
         <label>Department
           <input id="field_department" type="text" placeholder="Department or team" />
         </label>
@@ -135,7 +138,7 @@
 
     <section class="card">
       <h2>Report Preview</h2>
-      <p class="hint">Snapshot updates automatically. Copy and paste into the official form.</p>
+      <p class="hint">Snapshot updates automatically and reflects exactly what will be submitted for approval.</p>
       <textarea id="reportPreview" readonly rows="12" aria-label="Expense report preview"></textarea>
       <button id="copyPreview" type="button">Copy summary</button>
       <button id="finalizeSubmit" type="button">Finalize &amp; submit</button>
