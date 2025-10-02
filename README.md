@@ -10,6 +10,10 @@ A lightweight web application for preparing Freight Services expense reports wit
 - Offline-ready experience once the site has been loaded at least once while online.
 - Attach receipts (images or PDFs) to individual expenses and track upload status before submitting.
 
+## Comprehensive documentation
+
+For a full operational handbook—including architecture notes, onboarding checklists, and the official Freight Services expense reimbursement policy—see [`docs/OPERATIONS_GUIDE.md`](docs/OPERATIONS_GUIDE.md).
+
 ## Getting started
 1. Serve the project with any static HTTP server (for example `python -m http.server 8000`).
 2. Open the site in your browser and start adding expenses.
