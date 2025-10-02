@@ -69,6 +69,21 @@ describe('calculateTotals', () => {
       company: 340,
     });
   });
+
+  it('handles empty and malformed expense values gracefully', () => {
+    const totals = calculateTotals([
+      { amount: '10.50', reimbursable: '10.50', payment: 'personal' },
+      { amount: '', reimbursable: null, payment: 'company' },
+      { amount: undefined, reimbursable: undefined, payment: 'company' },
+      { amount: 'not-a-number', reimbursable: 'still-not', payment: 'personal' },
+    ]);
+
+    expect(totals).toEqual({
+      submitted: 10.5,
+      employee: 10.5,
+      company: 0,
+    });
+  });
 });
 
 describe('buildReportPayload', () => {
@@ -116,5 +131,138 @@ describe('buildReportPayload', () => {
     expect(() =>
       buildReportPayload(withoutEmail, { reportId: 'draft-123', finalizedAt: new Date() }),
     ).toThrow(/email/i);
+  });
+
+  it('includes rich metadata for various policies and filters empty expenses', () => {
+    const payload = buildReportPayload(
+      {
+        header: {
+          ...sampleState.header,
+          email: '  someone@example.com  ',
+        },
+        expenses: [
+          {
+            id: 'meal-1',
+            date: '2024-05-02',
+            type: 'meals_ga',
+            account: '64180',
+            description: 'Team dinner',
+            payment: 'personal',
+            amount: 48,
+            reimbursable: 48,
+            policy: 'meal',
+            mealType: 'dinner',
+            hasReceipt: false,
+            messages: [{ text: 'Needs manager approval' }],
+            receipts: [
+              {
+                id: 'receipt-1',
+                fileName: 'dinner.jpg',
+                contentType: 'image/jpeg',
+                fileSize: 1024,
+                downloadUrl: 'https://example.com/receipts/dinner',
+                uploadedAt: '2024-05-03T18:30:00Z',
+              },
+            ],
+          },
+          {
+            id: 'mileage-1',
+            date: '2024-05-03',
+            type: 'mileage',
+            account: '64190',
+            description: 'Client visit',
+            payment: 'personal',
+            amount: 32.5,
+            reimbursable: 32.5,
+            policy: 'mileage',
+            miles: 50,
+          },
+          {
+            id: 'travel-1',
+            date: '2024-05-04',
+            type: 'travel_ga',
+            account: '64190',
+            description: 'Hotel stay',
+            payment: 'company',
+            amount: 220,
+            reimbursable: 220,
+            policy: 'travel',
+            travelCategory: 'lodging',
+            travelClass: 'coach',
+            flightHours: 2,
+          },
+          {
+            id: 'ignore-me',
+            date: '2024-05-05',
+            type: 'office_supplies',
+            amount: 0,
+            reimbursable: 0,
+            payment: 'personal',
+            policy: 'default',
+          },
+        ],
+        history: [],
+        meta: sampleState.meta,
+      },
+      { reportId: 'rep-987', finalizedAt: '2024-05-10T12:00:00Z' },
+    );
+
+    expect(payload.reportId).toBe('rep-987');
+    expect(payload.employeeEmail).toBe('someone@example.com');
+    expect(payload.header.email).toBe('someone@example.com');
+    expect(payload.expenses).toHaveLength(3);
+
+    const [mealExpense, mileageExpense, travelExpense] = payload.expenses;
+
+    expect(mealExpense.metadata).toMatchObject({
+      payment: 'personal',
+      policy: 'meal',
+      mealType: 'dinner',
+      receiptProvided: false,
+      policyMessages: ['Needs manager approval'],
+      reimbursable: 48,
+    });
+    expect(mealExpense.metadata.receipts).toEqual([
+      {
+        id: 'receipt-1',
+        fileName: 'dinner.jpg',
+        contentType: 'image/jpeg',
+        fileSize: 1024,
+        storageProvider: undefined,
+        storageBucket: undefined,
+        storageKey: undefined,
+        storageUrl: undefined,
+        downloadUrl: 'https://example.com/receipts/dinner',
+        uploadedAt: '2024-05-03T18:30:00Z',
+      },
+    ]);
+    expect(mealExpense.incurredAt).toMatch(/^2024-05-02/);
+
+    expect(mileageExpense.metadata).toMatchObject({
+      policy: 'mileage',
+      miles: 50,
+      irsRate: 0.65,
+    });
+
+    expect(travelExpense.metadata).toMatchObject({
+      policy: 'travel',
+      travelCategory: 'lodging',
+      travelClass: 'coach',
+      flightHours: 2,
+    });
+
+    expect(payload.totals).toEqual({
+      submitted: 300.5,
+      employee: 80.5,
+      company: 220,
+    });
+
+    expect(payload.period).toEqual({ year: 2024, month: 5, week: 19 });
+  });
+
+  it('throws when submission date is invalid', () => {
+    expect(() =>
+      buildReportPayload(sampleState, { reportId: 'rep-111', finalizedAt: 'not-a-date' }),
+    ).toThrow(/valid submission date/i);
   });
 });
