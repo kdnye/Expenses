@@ -1,3 +1,5 @@
+import { buildApiUrl } from './config.js';
+
 const loginForm = document.querySelector('#loginForm');
 const loginCard = document.querySelector('#loginCard');
 const loginStatus = document.querySelector('#loginStatus');
@@ -340,7 +342,7 @@ async function refreshApprovals({ suppressStatus = false } = {}) {
   });
 
   try {
-    const response = await fetch(`/api/admin/approvals?${params.toString()}`, {
+    const response = await fetch(buildApiUrl(`/api/admin/approvals?${params.toString()}`), {
       credentials: 'include',
       headers: { accept: 'application/json' }
     });
@@ -389,15 +391,18 @@ async function submitApprovalDecision(reportId, action, stage, note, triggerButt
   }
 
   try {
-    const response = await fetch(`/api/admin/approvals/${encodeURIComponent(reportId)}/decision`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
+    const response = await fetch(
+      buildApiUrl(`/api/admin/approvals/${encodeURIComponent(reportId)}/decision`),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json'
+        },
+        body: JSON.stringify(payload)
+      }
+    );
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -441,7 +446,7 @@ function defaultDateRange() {
 
 async function fetchSession() {
   try {
-    const response = await fetch('/api/admin/session', {
+    const response = await fetch(buildApiUrl('/api/admin/session'), {
       credentials: 'include',
       headers: { accept: 'application/json' }
     });
@@ -520,7 +525,7 @@ loginForm?.addEventListener('submit', async (event) => {
   loginSubmit.disabled = true;
 
   try {
-    const response = await fetch('/api/admin/login', {
+    const response = await fetch(buildApiUrl('/api/admin/login'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
@@ -553,7 +558,7 @@ logoutBtn?.addEventListener('click', async () => {
   if (downloadBtn) downloadBtn.disabled = false;
 
   try {
-    const response = await fetch('/api/admin/logout', {
+    const response = await fetch(buildApiUrl('/api/admin/logout'), {
       method: 'POST',
       credentials: 'include'
     });
@@ -612,7 +617,7 @@ exportForm?.addEventListener('submit', async (event) => {
   showStatus(exportStatus, 'Preparing download…', 'info');
 
   try {
-    const response = await fetch(`/api/admin/reports?${params.toString()}`, {
+    const response = await fetch(buildApiUrl(`/api/admin/reports?${params.toString()}`), {
       method: 'GET',
       credentials: 'include'
     });
