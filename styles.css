@@ -97,6 +97,14 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+#apiAccessCard .grid {
+  align-items: end;
+}
+
+#apiAccessCard .checkbox {
+  align-self: end;
+}
+
 label {
   display: flex;
   flex-direction: column;
