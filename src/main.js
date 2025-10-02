@@ -1,9 +1,12 @@
 import { EXPENSE_TYPES, IRS_RATE, MEAL_LIMITS, headerBindings } from './constants.js';
-import { loadState, saveState } from './storage.js';
+import { loadState, saveState, createFreshState } from './storage.js';
+import buildReportPayload, { calculateTotals } from './reportPayload.js';
 import { fmtCurrency, parseNumber, uuid } from './utils.js';
 
 const state = loadState();
 const expenseRows = new Map();
+const SUBMIT_ENDPOINT = '/api/reports';
+let submitting = false;
 
 const elements = {
   expensesBody: document.querySelector('#expensesBody'),
@@ -11,10 +14,32 @@ const elements = {
   reportPreview: document.querySelector('#reportPreview'),
   copyPreview: document.querySelector('#copyPreview'),
   copyFeedback: document.querySelector('#copyFeedback'),
+  submissionFeedback: document.querySelector('#submissionFeedback'),
+  finalizeSubmit: document.querySelector('#finalizeSubmit'),
   totalSubmitted: document.querySelector('#totalSubmitted'),
   totalDueEmployee: document.querySelector('#totalDueEmployee'),
   totalCompanyCard: document.querySelector('#totalCompanyCard'),
 };
+
+const ensureStateShape = () => {
+  if (!state.header) {
+    state.header = {};
+  }
+  if (typeof state.header.email !== 'string') {
+    state.header.email = state.header.email ? String(state.header.email) : '';
+  }
+  if (!Array.isArray(state.history)) {
+    state.history = [];
+  }
+  if (!state.meta) {
+    state.meta = { draftId: uuid(), lastSavedMode: 'draft', lastSavedAt: null };
+  }
+  if (!state.meta.draftId) {
+    state.meta.draftId = uuid();
+  }
+};
+
+ensureStateShape();
 
 const findExpenseType = (value) => EXPENSE_TYPES.find((type) => type.value === value);
 
@@ -120,21 +145,19 @@ const updateRowUI = (expense) => {
 };
 
 const updateTotals = () => {
-  const totals = state.expenses.reduce((acc, expense) => {
-    const amount = parseNumber(expense.amount);
-    const reimb = parseNumber(expense.reimbursable);
-    acc.submitted += amount;
-    if (expense.payment === 'company') {
-      acc.company += reimb;
-    } else {
-      acc.employee += reimb;
-    }
-    return acc;
-  }, { submitted: 0, employee: 0, company: 0 });
+  const totals = calculateTotals(state.expenses);
 
   elements.totalSubmitted.textContent = fmtCurrency(totals.submitted);
   elements.totalDueEmployee.textContent = fmtCurrency(totals.employee);
   elements.totalCompanyCard.textContent = fmtCurrency(totals.company);
+};
+
+const setSubmissionFeedback = (message, variant = 'info') => {
+  if (!elements.submissionFeedback) return;
+  elements.submissionFeedback.textContent = message;
+  elements.submissionFeedback.dataset.variant = variant;
+  elements.submissionFeedback.classList.remove('success', 'error', 'info');
+  elements.submissionFeedback.classList.add(variant);
 };
 
 const updatePreview = () => {
@@ -142,6 +165,7 @@ const updatePreview = () => {
   const header = state.header;
   lines.push('Expense report');
   lines.push(`Name: ${header.name || ''}`);
+  lines.push(`Email: ${header.email || ''}`);
   lines.push(`Department: ${header.department || ''}`);
   lines.push(`Expense focus: ${header.focus || ''}`);
   lines.push(`Purpose: ${header.purpose || ''}`);
@@ -492,6 +516,116 @@ const initCopyButton = () => {
   elements.copyPreview?.addEventListener('click', copyPreview);
 };
 
+const resetHeaderInputs = () => {
+  Object.entries(headerBindings).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const value = state.header[key];
+    if (value === undefined || value === null) {
+      el.value = '';
+    } else if (el.type === 'number') {
+      el.value = value === '' ? '' : String(value);
+    } else {
+      el.value = value;
+    }
+  });
+};
+
+const clearExpensesUI = () => {
+  expenseRows.forEach((refs) => {
+    refs.row.remove();
+  });
+  expenseRows.clear();
+  elements.expensesBody.innerHTML = '';
+};
+
+const buildHistoryEntry = (payload, responseData) => {
+  const serverId = responseData?.id || responseData?.reportId || responseData?.report?.id || null;
+  return {
+    reportId: payload.reportId,
+    serverId,
+    finalizedAt: payload.finalizedAt,
+    employeeEmail: payload.employeeEmail,
+    totals: payload.totals,
+  };
+};
+
+const finalizeSubmit = async () => {
+  if (submitting) return;
+
+  state.expenses.forEach((expense) => evaluateExpense(expense));
+  updateTotals();
+  updatePreview();
+
+  const duplicate = state.history?.some((entry) => entry.reportId === state.meta?.draftId);
+  if (duplicate) {
+    setSubmissionFeedback('This report has already been submitted. Start a new report to submit again.', 'info');
+    return;
+  }
+
+  const finalizedAt = new Date();
+  let payload;
+  try {
+    payload = buildReportPayload(state, { reportId: state.meta.draftId, finalizedAt });
+  } catch (error) {
+    setSubmissionFeedback(error.message || 'Unable to prepare submission. Check required fields and try again.', 'error');
+    return;
+  }
+
+  submitting = true;
+  elements.finalizeSubmit?.setAttribute('disabled', 'disabled');
+  setSubmissionFeedback('Submitting report…', 'info');
+
+  try {
+    const response = await fetch(SUBMIT_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server responded with status ${response.status}`);
+    }
+
+    let responseBody = null;
+    try {
+      responseBody = await response.json();
+    } catch (error) {
+      responseBody = null;
+    }
+
+    const historyEntry = buildHistoryEntry(payload, responseBody);
+    state.history.push(historyEntry);
+
+    const freshState = createFreshState();
+    state.header = { ...freshState.header };
+    state.expenses = [];
+    state.meta = { ...freshState.meta, lastSavedMode: 'finalized', lastSavedAt: new Date().toISOString() };
+
+    clearExpensesUI();
+    addExpense();
+    resetHeaderInputs();
+    updateTotals();
+    updatePreview();
+
+    saveState(state, { mode: 'finalized' });
+
+    const confirmationId = historyEntry.serverId ? `Confirmation ID: ${historyEntry.serverId}.` : 'Submission recorded.';
+    setSubmissionFeedback(`Report submitted successfully. ${confirmationId}`, 'success');
+  } catch (error) {
+    console.error('Report submission failed', error);
+    setSubmissionFeedback('Submission failed. Check your connection and try again in a few moments. Your draft is still saved.', 'error');
+    saveState(state);
+  } finally {
+    submitting = false;
+    elements.finalizeSubmit?.removeAttribute('disabled');
+  }
+};
+
+const initFinalizeButton = () => {
+  elements.finalizeSubmit?.addEventListener('click', finalizeSubmit);
+};
+
 const refreshAllExpenses = () => {
   state.expenses.forEach((expense) => {
     evaluateExpense(expense);
@@ -512,6 +646,7 @@ const init = () => {
   restoreExpenses();
   initAddButton();
   initCopyButton();
+  initFinalizeButton();
 };
 
 init();

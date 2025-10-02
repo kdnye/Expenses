@@ -1,0 +1,11 @@
+{
+  "name": "fsi-expense-report",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^0.34.6"
+  }
+}
