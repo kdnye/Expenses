@@ -222,6 +222,9 @@ const updateRowUI = (expense) => {
   const refs = expenseRows.get(expense.id);
   if (!refs) return;
 
+  const policy = expense.policy || findExpenseType(expense.type)?.policy || 'default';
+  setDetailVisibility(policy, refs.detailBlocks);
+
   refs.reimbCell.textContent = fmtCurrency(expense.reimbursable || 0);
   if (expense.policy === 'mileage') {
     refs.amountInput.value = expense.amount ? expense.amount.toFixed(2) : '';
@@ -319,6 +322,17 @@ const persistAndRefresh = (expense, { previewOnly = false } = {}) => {
   updatePreview();
 };
 
+const setDetailVisibility = (policy, detailBlocks) => {
+  Object.entries(detailBlocks).forEach(([key, blocks]) => {
+    const targets = Array.isArray(blocks) ? blocks : [blocks];
+    targets
+      .filter(Boolean)
+      .forEach((block) => {
+        block.hidden = policy !== key;
+      });
+  });
+};
+
 const applyExpenseType = (expense, refs) => {
   ensureReceiptArray(expense);
   const meta = findExpenseType(expense.type) || EXPENSE_TYPES[0];
@@ -326,10 +340,7 @@ const applyExpenseType = (expense, refs) => {
   expense.account = meta.account;
   refs.accountCell.textContent = meta.account;
 
-  Object.entries(refs.detailBlocks).forEach(([key, block]) => {
-    if (!block) return;
-    block.hidden = meta.policy !== key;
-  });
+  setDetailVisibility(meta.policy, refs.detailBlocks);
 
   if (meta.policy !== 'mileage') {
     refs.amountInput.removeAttribute('readonly');
@@ -429,9 +440,9 @@ const buildRow = (expense) => {
   const travelClass = row.querySelector('.exp-travel-class');
   const flightHours = row.querySelector('.exp-flight-hours');
   const detailBlocks = {
-    meal: row.querySelector('[data-detail="meal"]'),
-    mileage: row.querySelector('[data-detail="mileage"]'),
-    travel: row.querySelector('[data-detail="travel"]'),
+    meal: Array.from(row.querySelectorAll('[data-detail="meal"]')),
+    mileage: Array.from(row.querySelectorAll('[data-detail="mileage"]')),
+    travel: Array.from(row.querySelectorAll('[data-detail="travel"]')),
   };
   const flightOnlyBlocks = row.querySelectorAll('[data-flight-only]');
 
