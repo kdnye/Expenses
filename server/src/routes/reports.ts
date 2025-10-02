@@ -20,7 +20,7 @@ router.post('/', authenticate, async (req, res, next) => {
 
   const reportData: Prisma.ReportCreateInput = {
     reportId: data.reportId,
-    employeeEmail: data.employeeEmail,
+    employeeEmail: data.employeeEmail.toLowerCase(),
     finalizedAt: data.finalizedAt,
     finalizedYear: data.period.year,
     finalizedMonth: data.period.month,

@@ -41,3 +41,20 @@ model Expense {
   @@map("expenses")
   @@index([reportId], map: "expenses_report_id_idx")
 }
+
+enum AdminRole {
+  CFO
+  SUPER
+  ANALYST
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String    @map("password_hash")
+  role         AdminRole @default(ANALYST)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("admin_users")
+}
