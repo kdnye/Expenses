@@ -1,19 +1,23 @@
-const CACHE_VERSION = 'expenses-cache-v1';
+const CACHE_VERSION = 'expenses-cache-v3';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/styles.css',
   '/manifest.webmanifest',
+  '/fsi-logo.png',
   '/src/constants.js',
   '/src/main.js',
   '/src/storage.js',
   '/src/utils.js',
 ];
 
+const precacheCoreAssets = async () => {
+  const cache = await caches.open(CACHE_VERSION);
+  await cache.addAll(PRECACHE_URLS);
+};
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => cache.addAll(PRECACHE_URLS))
-  );
+  event.waitUntil(precacheCoreAssets());
   self.skipWaiting();
 });
 
@@ -30,40 +34,55 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+const shouldHandleFetch = (request) => {
+  if (request.method !== 'GET') {
+    return false;
+  }
+
+  const requestURL = new URL(request.url);
+  return requestURL.origin === self.location.origin;
+};
+
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') {
+  if (!shouldHandleFetch(event.request)) {
     return;
   }
 
-  const requestURL = new URL(event.request.url);
-  if (requestURL.origin !== self.location.origin) {
-    return;
-  }
+  const isDocumentRequest =
+    event.request.mode === 'navigate' || event.request.destination === 'document';
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
+    (async () => {
+      const cachedResponse = await caches.match(event.request);
       if (cachedResponse) {
         return cachedResponse;
       }
 
-      return fetch(event.request)
-        .then((networkResponse) => {
-          if (
-            !networkResponse ||
-            networkResponse.status !== 200 ||
-            networkResponse.type !== 'basic'
-          ) {
-            return networkResponse;
+      try {
+        const networkResponse = await fetch(event.request);
+        if (
+          networkResponse &&
+          networkResponse.status === 200 &&
+          networkResponse.type === 'basic'
+        ) {
+          const cache = await caches.open(CACHE_VERSION);
+          cache.put(event.request, networkResponse.clone());
+        }
+
+        return networkResponse;
+      } catch (error) {
+        if (isDocumentRequest) {
+          const fallback = await caches.match('/index.html');
+          if (fallback) {
+            return fallback;
           }
+        }
 
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_VERSION).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-
-          return networkResponse;
-        })
-        .catch(() => caches.match('/index.html'));
-    })
+        return new Response(null, {
+          status: 503,
+          statusText: 'Service Unavailable',
+        });
+      }
+    })()
   );
 });
