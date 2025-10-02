@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Report {
+  reportId       String    @id @map("report_id")
+  employeeEmail  String    @map("employee_email")
+  finalizedAt    DateTime  @map("finalized_at")
+  finalizedYear  Int       @map("finalized_year")
+  finalizedMonth Int       @map("finalized_month")
+  finalizedWeek  Int       @map("finalized_week")
+  header         Json?
+  totals         Json?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  expenses       Expense[]
+
+  @@map("reports")
+  @@index([employeeEmail, finalizedAt], map: "reports_employee_email_finalized_at_idx")
+  @@index([finalizedYear, finalizedMonth, finalizedWeek], map: "reports_period_idx")
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  reportId    String   @map("report_id")
+  externalId  String?  @map("external_id")
+  category    String
+  description String?
+  amount      Decimal
+  currency    String
+  incurredAt  DateTime? @map("incurred_at")
+  metadata    Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  report      Report   @relation(fields: [reportId], references: [reportId], onDelete: Cascade)
+
+  @@map("expenses")
+  @@index([reportId], map: "expenses_report_id_idx")
+}
