@@ -33,8 +33,9 @@ body {
 header {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 28px 24px 18px;
+  flex-wrap: wrap;
+  gap: clamp(16px, 2.8vw, 32px);
+  padding: clamp(22px, 3vw, 36px) clamp(20px, 4vw, 52px) clamp(16px, 3vw, 28px);
   background: linear-gradient(135deg, rgba(15, 47, 107, 0.95), rgba(28, 83, 161, 0.95));
   color: #fff;
   border-bottom: 4px solid rgba(194, 39, 45, 0.2);
@@ -43,36 +44,43 @@ header {
 
 header .logo {
   display: block;
-  height: 72px;
+  height: clamp(56px, 6vw, 80px);
   width: auto;
-  max-width: 220px;
+  max-width: 240px;
+}
+
+header .header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: min(320px, 100%);
 }
 
 header h1 {
-  margin: 0 0 6px;
-  font-size: clamp(1.6rem, 2vw + 1rem, 2.2rem);
+  margin: 0;
+  font-size: clamp(1.6rem, 1.6vw + 1.1rem, 2.4rem);
   color: inherit;
 }
 
 header .tagline {
   margin: 0;
-  color: rgba(255, 255, 255, 0.8);
-  max-width: 620px;
+  color: rgba(255, 255, 255, 0.82);
+  max-width: min(720px, 100%);
 }
 
 main {
-  width: min(1120px, 95vw);
+  width: min(1280px, calc(100% - 64px));
   margin: 0 auto 48px;
-  padding: 32px 0 56px;
+  padding: clamp(24px, 4vw, 48px) 0 56px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: clamp(20px, 3vw, 32px);
 }
 
 .card {
   background: var(--card);
   border-radius: 16px;
-  padding: 24px;
+  padding: clamp(20px, 3vw, 28px);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
 }
@@ -433,12 +441,12 @@ input.readonly {
 @media (max-width: 860px) {
   header {
     flex-direction: column;
-    align-items: flex-start;
-    text-align: left;
+    align-items: center;
+    text-align: center;
   }
 
-  header .logo {
-    height: 56px;
+  header .header-copy {
+    align-items: center;
   }
 
   table {
@@ -453,7 +461,44 @@ input.readonly {
   }
 
   .card {
-    padding: 20px;
+    padding: clamp(18px, 5vw, 22px);
+  }
+}
+
+@media (max-width: 720px) {
+  main {
+    width: calc(100% - 32px);
+  }
+
+  table {
+    min-width: 640px;
+  }
+}
+
+@media (max-width: 480px) {
+  header {
+    padding-inline: 20px;
+  }
+
+  main {
+    width: calc(100% - 24px);
+    padding-top: 20px;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .card-header button {
+    width: 100%;
+  }
+}
+
+@media (min-width: 1440px) {
+  main {
+    width: min(1400px, calc(100% - 96px));
+    gap: 36px;
   }
 }
 
