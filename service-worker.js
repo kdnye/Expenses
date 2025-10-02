@@ -42,29 +42,37 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request)
-        .then((networkResponse) => {
-          if (
-            !networkResponse ||
-            networkResponse.status !== 200 ||
-            networkResponse.type !== 'basic'
-          ) {
-            return networkResponse;
-          }
-
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_VERSION).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (
+          !networkResponse ||
+          networkResponse.status !== 200 ||
+          networkResponse.type !== 'basic'
+        ) {
           return networkResponse;
-        })
-        .catch(() => caches.match('/index.html'));
-    })
+        }
+
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_VERSION).then((cache) => {
+          cache.put(event.request, responseToCache);
+        });
+
+        return networkResponse;
+      })
+      .catch(async () => {
+        const cachedResponse = await caches.match(event.request);
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+
+        if (event.request.mode === 'navigate') {
+          const fallback = await caches.match('/index.html');
+          if (fallback) {
+            return fallback;
+          }
+        }
+
+        throw new Error('Network request failed and no cache entry found');
+      })
   );
 });
