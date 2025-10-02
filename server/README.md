@@ -18,7 +18,7 @@ Create a `.env` file alongside `package.json` with the following keys:
 | `DATABASE_URL` | Yes | PostgreSQL connection string used by Prisma. Example: `postgresql://postgres:postgres@localhost:5432/expenses?schema=public`. |
 | `API_KEY` | Yes | Shared secret token that clients must provide in the `x-api-key` header when creating reports. |
 | `ADMIN_JWT_SECRET` | Yes | Secret string used to sign administrator session cookies. Use a long, random value. |
-| `RECEIPT_STORAGE_PROVIDER` | No | Receipt storage backend: `memory` (default), `s3`, or `gcs`. |
+| `RECEIPT_STORAGE_PROVIDER` | No | Receipt storage backend: `memory` (default), `s3`, `gcs`, or `gdrive`. |
 | `RECEIPT_MAX_BYTES` | No | Maximum allowed file size per receipt upload (defaults to 10&nbsp;MiB). |
 | `RECEIPT_MAX_FILES` | No | Maximum number of files accepted per upload request (defaults to 5). |
 | `RECEIPT_URL_TTL_SECONDS` | No | Signed URL lifetime in seconds when generating download links (defaults to 900). |
@@ -31,6 +31,9 @@ Create a `.env` file alongside `package.json` with the following keys:
 | `GCS_BUCKET` | For `gcs` | Google Cloud Storage bucket name. |
 | `GCS_RECEIPT_PREFIX` | No | Prefix under which receipts are stored (defaults to `receipts`). |
 | `GCS_PUBLIC_URL_TEMPLATE` | No | Template for constructing public URLs when signed URLs are not needed. |
+| `GDRIVE_FOLDER_ID` | For `gdrive` | Destination folder ID where receipts will be uploaded. |
+| `GDRIVE_CREDENTIALS_JSON` | No | JSON service-account credentials; if omitted, the SDK uses `GOOGLE_APPLICATION_CREDENTIALS`. |
+| `GDRIVE_SCOPES` | No | Comma-separated OAuth scopes for Drive access (defaults to `https://www.googleapis.com/auth/drive.file`). |
 
 ## Available scripts
 
@@ -115,7 +118,7 @@ Ensure the database exists before running the migration. The same `DATABASE_URL`
 
 Clients attach receipt images or PDFs through `POST /api/receipts`. Requests must include the report's draft identifier (`reportId`), the client-side expense identifier (`expenseId`), and one or more files in a multipart payload. The API validates MIME type, file count, and size before streaming each file to the configured object storage provider. Metadata (content type, checksum, storage key, etc.) is persisted in the `receipts` table and linked back to the appropriate expense once the report is finalized.
 
-By default the server keeps receipts in an in-memory sink (`RECEIPT_STORAGE_PROVIDER=memory`), which is useful for tests or local development. Configure the provider for production uploads by setting `RECEIPT_STORAGE_PROVIDER` to `s3` or `gcs` and supplying the corresponding bucket and credential environment variables noted above. The admin export generates signed download URLs using the configured storage backend.
+By default the server keeps receipts in an in-memory sink (`RECEIPT_STORAGE_PROVIDER=memory`), which is useful for tests or local development. Configure the provider for production uploads by setting `RECEIPT_STORAGE_PROVIDER` to `s3`, `gcs`, or `gdrive` and supplying the corresponding bucket/folder and credential environment variables noted above. The admin export generates signed download URLs using the configured storage backend.
 
 ## Serving the SPA
 

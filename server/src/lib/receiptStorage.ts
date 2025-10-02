@@ -1,5 +1,6 @@
 import type { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
 
 export interface UploadReceiptOptions {
   reportId: string;
@@ -163,6 +164,109 @@ async function createGcsStorage(): Promise<ReceiptStorage> {
   };
 }
 
+type GoogleDriveCredentials = {
+  client_email?: string;
+  private_key?: string;
+  [key: string]: unknown;
+};
+
+const normalizeDriveCredentials = (json: string): GoogleDriveCredentials => {
+  let parsed: GoogleDriveCredentials;
+  try {
+    parsed = JSON.parse(json);
+  } catch (error) {
+    throw new Error('Failed to parse GDRIVE_CREDENTIALS_JSON.');
+  }
+
+  if (typeof parsed.private_key === 'string') {
+    parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+  }
+
+  return parsed;
+};
+
+async function createGoogleDriveStorage(): Promise<ReceiptStorage> {
+  const folderId = process.env.GDRIVE_FOLDER_ID;
+  if (!folderId) {
+    throw new Error('GDRIVE_FOLDER_ID is required when using the gdrive receipt storage provider.');
+  }
+
+  const scopesEnv = process.env.GDRIVE_SCOPES;
+  const scopes = scopesEnv
+    ? scopesEnv
+        .split(',')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+    : ['https://www.googleapis.com/auth/drive.file'];
+
+  const credentialsJson = process.env.GDRIVE_CREDENTIALS_JSON;
+  const credentials = credentialsJson ? normalizeDriveCredentials(credentialsJson) : undefined;
+
+  const { google } = await import('@googleapis/drive');
+  const auth = new google.auth.GoogleAuth({
+    scopes,
+    ...(credentials ? { credentials } : {}),
+  });
+
+  const drive = google.drive({ version: 'v3', auth });
+
+  return {
+    async upload(options: UploadReceiptOptions) {
+      const objectKey = buildObjectKey(options.reportId, options.expenseId, options.fileName);
+      const driveFileName = objectKey.replace(/\//g, '__');
+
+      const response = await drive.files.create({
+        requestBody: {
+          name: driveFileName,
+          parents: [folderId],
+          mimeType: options.contentType,
+        },
+        media: {
+          mimeType: options.contentType,
+          body: Readable.from(options.data),
+        },
+        fields: 'id, webViewLink, webContentLink',
+        supportsAllDrives: true,
+      });
+
+      const fileId = response.data.id;
+      if (!fileId) {
+        throw new Error('Google Drive did not return a file identifier for the uploaded receipt.');
+      }
+
+      const storageUrl = response.data.webViewLink ?? response.data.webContentLink ?? undefined;
+
+      return {
+        storageProvider: 'gdrive',
+        storageBucket: folderId,
+        storageKey: fileId,
+        storageUrl,
+      } satisfies StoredReceipt;
+    },
+    async getDownloadUrl(stored: StoredReceipt) {
+      if (stored.storageProvider !== 'gdrive' || !stored.storageKey) {
+        return stored.storageUrl ?? undefined;
+      }
+
+      const tokenResponse = await auth.getAccessToken();
+      const token =
+        typeof tokenResponse === 'string'
+          ? tokenResponse
+          : tokenResponse && typeof tokenResponse === 'object' && 'token' in tokenResponse
+            ? (tokenResponse as { token?: string }).token ?? null
+            : null;
+
+      if (!token) {
+        return stored.storageUrl ?? undefined;
+      }
+
+      const encodedId = encodeURIComponent(stored.storageKey);
+      const encodedToken = encodeURIComponent(token);
+      return `https://www.googleapis.com/drive/v3/files/${encodedId}?alt=media&access_token=${encodedToken}`;
+    },
+  } satisfies ReceiptStorage;
+}
+
 let cachedStorage: Promise<ReceiptStorage> | null = null;
 
 export const getReceiptStorage = async (): Promise<ReceiptStorage> => {
@@ -175,6 +279,9 @@ export const getReceiptStorage = async (): Promise<ReceiptStorage> => {
       case 'gcs':
         cachedStorage = createGcsStorage();
         break;
+      case 'gdrive':
+        cachedStorage = createGoogleDriveStorage();
+        break;
       case 'memory':
         cachedStorage = Promise.resolve(new MemoryReceiptStorage());
         break;
@@ -184,6 +291,10 @@ export const getReceiptStorage = async (): Promise<ReceiptStorage> => {
   }
 
   return cachedStorage;
+};
+
+export const resetReceiptStorageCache = () => {
+  cachedStorage = null;
 };
 
 export const RECEIPT_ALLOWED_MIME_PREFIXES = ['image/'];
