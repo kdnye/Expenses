@@ -12,6 +12,7 @@
   "devDependencies": {
     "@types/supertest": "^2.0.16",
     "fflate": "^0.8.1",
+    "jsdom": "^27.0.0",
     "supertest": "^6.3.4",
     "vitest": "^0.34.6"
   }
