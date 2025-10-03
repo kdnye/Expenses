@@ -3,8 +3,16 @@ import { loadState, saveState, createFreshState } from './storage.js';
 import buildReportPayload, { calculateTotals } from './reportPayload.js';
 import { fmtCurrency, parseNumber, uuid } from './utils.js';
 import { buildApiUrl, isOfflineOnly } from './config.js';
+import {
+  saveReceiptsForExpense,
+  getStoredReceipts,
+  deleteReceipts,
+  clearReceiptsForDraft,
+  createObjectUrlForReceipt,
+  revokeObjectUrl,
+} from './receiptStorage.js';
 
-const state = loadState();
+const state = await loadState();
 const expenseRows = new Map();
 const offlineOnly = isOfflineOnly();
 const SUBMIT_ENDPOINT = buildApiUrl('/api/reports');
@@ -12,9 +20,94 @@ const RECEIPT_UPLOAD_ENDPOINT = buildApiUrl('/api/receipts');
 const MAX_RECEIPT_BYTES = 10 * 1024 * 1024; // 10 MB limit per file.
 const ACCEPTED_RECEIPT_TYPES = new Set(['application/pdf']);
 const ACCEPTED_RECEIPT_PREFIXES = ['image/'];
+const storedReceiptObjectUrls = new Map();
 const pendingReceiptFiles = new Map();
+if (state.meta?.storedReceipts) {
+  Object.entries(state.meta.storedReceipts).forEach(([expenseId, items]) => {
+    if (Array.isArray(items) && items.length) {
+      pendingReceiptFiles.set(expenseId, items.map((item) => ({ ...item })));
+    }
+  });
+}
 const receiptUploadState = new Map();
 let submitting = false;
+
+const syncStoredReceiptMetadata = () => {
+  const serialized = {};
+  pendingReceiptFiles.forEach((items, expenseId) => {
+    if (!Array.isArray(items) || !items.length) return;
+    serialized[expenseId] = items.map((item) => ({
+      id: item.id,
+      fileName: item.fileName,
+      fileSize: item.fileSize,
+      contentType: item.contentType,
+      lastModified: item.lastModified,
+    }));
+  });
+  state.meta.storedReceipts = serialized;
+};
+
+const revokeObjectUrlsForExpense = (expenseId) => {
+  const metadata = pendingReceiptFiles.get(expenseId) || [];
+  metadata.forEach((meta) => {
+    const existing = storedReceiptObjectUrls.get(meta.id);
+    if (existing) {
+      revokeObjectUrl(existing);
+      storedReceiptObjectUrls.delete(meta.id);
+    }
+  });
+};
+
+const clearAllReceiptObjectUrls = () => {
+  storedReceiptObjectUrls.forEach((url) => revokeObjectUrl(url));
+  storedReceiptObjectUrls.clear();
+};
+
+const hydrateOfflineReceiptsForExpense = async (expenseId) => {
+  if (!offlineOnly) return;
+  const metadata = pendingReceiptFiles.get(expenseId);
+  if (!metadata?.length) return;
+  const expense = state.expenses.find((item) => item.id === expenseId);
+  if (!expense) return;
+
+  let receipts;
+  try {
+    receipts = await getStoredReceipts(state.meta?.draftId, expenseId, metadata.map((item) => item.id));
+  } catch (error) {
+    console.warn('Unable to load stored receipt blobs for expense', expenseId, error);
+    return;
+  }
+
+  receipts.forEach(({ metadata: meta, blob }) => {
+    let url = storedReceiptObjectUrls.get(meta.id);
+    if (!url) {
+      url = createObjectUrlForReceipt(blob);
+      if (url) {
+        storedReceiptObjectUrls.set(meta.id, url);
+      }
+    }
+
+    const existing = expense.receipts.find((receipt) => receipt.draftReceiptId === meta.id);
+    const base = {
+      draftReceiptId: meta.id,
+      fileName: meta.fileName,
+      fileSize: meta.fileSize,
+      contentType: meta.contentType,
+      lastModified: meta.lastModified,
+      storageProvider: 'local',
+      storageKey: meta.id,
+    };
+
+    if (existing) {
+      Object.assign(existing, base);
+      existing.downloadUrl = url;
+    } else {
+      expense.receipts.push({ ...base, downloadUrl: url });
+    }
+  });
+};
+
+syncStoredReceiptMetadata();
 
 const hasWindow = typeof window !== 'undefined';
 const API_KEY_SESSION_STORAGE_KEY = 'fsi-expense-api-key';
@@ -300,23 +393,31 @@ const renderReceiptList = (expense) => {
   });
 };
 
-const updateReceiptUI = (expense) => {
+const updateReceiptUI = async (expense) => {
   const pending = pendingReceiptFiles.get(expense.id) || [];
   const status = receiptUploadState.get(expense.id);
-  renderReceiptList(expense);
 
   if (offlineOnly) {
-    const uploaded = ensureReceiptArray(expense);
-    if (uploaded.length) {
-      const label = uploaded.length === 1
-        ? '1 receipt available from previous uploads'
-        : `${uploaded.length} receipts available from previous uploads`;
+    await hydrateOfflineReceiptsForExpense(expense.id);
+    renderReceiptList(expense);
+    const receipts = ensureReceiptArray(expense).filter((receipt) => receipt.draftReceiptId);
+    if (receipts.length) {
+      const label =
+        receipts.length === 1
+          ? '1 receipt stored locally'
+          : `${receipts.length} receipts stored locally`;
       setReceiptStatus(expense.id, label, 'success');
     } else {
-      setReceiptStatus(expense.id, 'Receipt uploads are unavailable in offline mode.', 'info');
+      setReceiptStatus(
+        expense.id,
+        'Attach receipts now and they will upload automatically once you are back online.',
+        'info'
+      );
     }
     return;
   }
+
+  renderReceiptList(expense);
 
   if (status) {
     setReceiptStatus(expense.id, status.message, status.status);
@@ -329,7 +430,7 @@ const updateReceiptUI = (expense) => {
     return;
   }
 
-  const uploaded = ensureReceiptArray(expense);
+  const uploaded = ensureReceiptArray(expense).filter((receipt) => !receipt.draftReceiptId);
   if (uploaded.length) {
     const label = uploaded.length === 1 ? '1 receipt uploaded' : `${uploaded.length} receipts uploaded`;
     setReceiptStatus(expense.id, label, 'success');
@@ -340,7 +441,15 @@ const updateReceiptUI = (expense) => {
 };
 
 const clearReceiptStateForExpense = (expenseId) => {
-  pendingReceiptFiles.delete(expenseId);
+  if (pendingReceiptFiles.has(expenseId)) {
+    revokeObjectUrlsForExpense(expenseId);
+    pendingReceiptFiles.delete(expenseId);
+    syncStoredReceiptMetadata();
+  }
+  const expense = state.expenses.find((item) => item.id === expenseId);
+  if (expense?.receipts) {
+    expense.receipts = expense.receipts.filter((receipt) => !receipt.draftReceiptId);
+  }
   receiptUploadState.delete(expenseId);
 };
 
@@ -559,7 +668,7 @@ const persistAndRefresh = (expense, { previewOnly = false } = {}) => {
   if (index !== -1) {
     state.expenses[index] = { ...state.expenses[index], ...expense };
   }
-  saveState(state);
+  void saveState(state);
   updateRowUI(expense);
   if (!previewOnly) {
     updateTotals();
@@ -595,6 +704,9 @@ const removeExpense = (id) => {
 
   state.expenses.splice(index, 1);
   clearReceiptStateForExpense(id);
+  deleteReceipts(state.meta?.draftId, id).catch((error) => {
+    console.warn('Unable to remove stored receipts for deleted expense', error);
+  });
   const refs = expenseRows.get(id);
   if (refs) {
     refs.row.remove();
@@ -603,11 +715,11 @@ const removeExpense = (id) => {
 
   updateTotals();
   updatePreview();
-  saveState(state);
+  void saveState(state);
 };
 
 const persistAndRefreshHeader = () => {
-  saveState(state);
+  void saveState(state);
   state.expenses.forEach((expense) => {
     evaluateExpense(expense);
     updateRowUI(expense);
@@ -746,19 +858,11 @@ const buildRow = (expense) => {
     persistAndRefresh(expense);
   });
 
-  if (receiptInput) {
-    receiptInput.disabled = offlineOnly;
-    if (offlineOnly) {
-      receiptInput.title = 'Receipts can be attached once you are back online.';
-    }
+  if (receiptInput && offlineOnly) {
+    receiptInput.title = 'Receipts are stored locally and will upload once you reconnect.';
   }
 
-  receiptInput?.addEventListener('change', () => {
-    if (offlineOnly) {
-      receiptInput.value = '';
-      setReceiptStatus(expense.id, 'Receipts can be attached once you are back online.', 'info');
-      return;
-    }
+  receiptInput?.addEventListener('change', async () => {
     const files = Array.from(receiptInput.files || []);
     receiptInput.value = '';
     if (!files.length) return;
@@ -769,8 +873,9 @@ const buildRow = (expense) => {
         status: 'error',
         message: `Unsupported file type: ${invalidType.type || invalidType.name}`,
       });
-      pendingReceiptFiles.delete(expense.id);
-      updateReceiptUI(expense);
+      clearReceiptStateForExpense(expense.id);
+      await deleteReceipts(state.meta?.draftId, expense.id).catch(() => {});
+      void updateReceiptUI(expense);
       return;
     }
 
@@ -781,17 +886,45 @@ const buildRow = (expense) => {
         status: 'error',
         message: `File exceeds ${maxLabel}: ${oversize.name}`,
       });
-      pendingReceiptFiles.delete(expense.id);
-      updateReceiptUI(expense);
+      clearReceiptStateForExpense(expense.id);
+      await deleteReceipts(state.meta?.draftId, expense.id).catch(() => {});
+      void updateReceiptUI(expense);
       return;
     }
 
-    receiptUploadState.set(expense.id, {
-      status: 'info',
-      message: files.length === 1 ? '1 receipt ready to upload' : `${files.length} receipts ready to upload`,
-    });
-    pendingReceiptFiles.set(expense.id, files);
-    updateReceiptUI(expense);
+    let metadata = [];
+    try {
+      metadata = await saveReceiptsForExpense(state.meta?.draftId, expense.id, files);
+    } catch (error) {
+      console.error('Unable to persist receipt files for expense', expense.id, error);
+      receiptUploadState.set(expense.id, {
+        status: 'error',
+        message: 'Unable to store receipts locally. Check storage permissions and try again.',
+      });
+      clearReceiptStateForExpense(expense.id);
+      void updateReceiptUI(expense);
+      return;
+    }
+
+    if (metadata.length) {
+      pendingReceiptFiles.set(expense.id, metadata);
+    } else {
+      pendingReceiptFiles.delete(expense.id);
+    }
+    syncStoredReceiptMetadata();
+
+    if (!offlineOnly) {
+      receiptUploadState.set(expense.id, {
+        status: 'info',
+        message: metadata.length === 1 ? '1 receipt ready to upload' : `${metadata.length} receipts ready to upload`,
+      });
+    } else {
+      receiptUploadState.delete(expense.id);
+    }
+
+    await hydrateOfflineReceiptsForExpense(expense.id);
+    void saveState(state);
+    void updateReceiptUI(expense);
   });
 
   milesInput.addEventListener('input', () => {
@@ -853,7 +986,7 @@ const addExpense = (initial = {}) => {
   updateRowUI(expense);
   updateTotals();
   updatePreview();
-  saveState(state);
+  void saveState(state);
 };
 
 const restoreExpenses = () => {
@@ -924,7 +1057,9 @@ const clearExpensesUI = () => {
   });
   expenseRows.clear();
   elements.expensesBody.innerHTML = '';
+  clearAllReceiptObjectUrls();
   pendingReceiptFiles.clear();
+  syncStoredReceiptMetadata();
   receiptUploadState.clear();
 };
 
@@ -942,6 +1077,7 @@ const buildHistoryEntry = (payload, responseData) => {
 const applyFinalizeSuccessState = (historyEntry, { mode, successMessage }) => {
   state.history.push(historyEntry);
 
+  const previousDraftId = state.meta?.draftId;
   const freshState = createFreshState();
   state.header = { ...freshState.header };
   state.expenses = [];
@@ -953,7 +1089,13 @@ const applyFinalizeSuccessState = (historyEntry, { mode, successMessage }) => {
   updateTotals();
   updatePreview();
 
-  saveState(state, { mode });
+  if (previousDraftId) {
+    clearReceiptsForDraft(previousDraftId).catch((error) => {
+      console.warn('Unable to clear stored receipts for finalized draft', error);
+    });
+  }
+
+  void saveState(state, { mode });
   setSubmissionFeedback(successMessage, 'success');
 };
 
@@ -996,29 +1138,63 @@ const mergeReceiptMetadata = (expense, uploadedReceipts) => {
 };
 
 const uploadReceiptsForExpense = async (expense, reportId) => {
-  const files = pendingReceiptFiles.get(expense.id);
-  if (!files?.length) return;
+  const metadata = pendingReceiptFiles.get(expense.id);
+  if (!metadata?.length) return;
 
   if (!hasApiKey()) {
     receiptUploadState.set(expense.id, {
       status: 'error',
       message: 'Add the API access key before uploading receipts.',
     });
-    updateReceiptUI(expense);
+    void updateReceiptUI(expense);
     throw new Error('Missing API key for receipt upload');
   }
 
   receiptUploadState.set(expense.id, {
     status: 'uploading',
-    message: files.length === 1 ? 'Uploading 1 receipt…' : `Uploading ${files.length} receipts…`,
+    message: metadata.length === 1 ? 'Uploading 1 receipt…' : `Uploading ${metadata.length} receipts…`,
   });
-  updateReceiptUI(expense);
+  void updateReceiptUI(expense);
+
+  let stored = [];
+  try {
+    stored = await getStoredReceipts(state.meta?.draftId, expense.id, metadata.map((item) => item.id));
+  } catch (error) {
+    console.error('Unable to read stored receipts for upload', error);
+    receiptUploadState.set(expense.id, {
+      status: 'error',
+      message: 'Unable to read stored receipts for upload. Try reattaching the files.',
+    });
+    void updateReceiptUI(expense);
+    throw error;
+  }
+
+  if (!stored.length) {
+    receiptUploadState.set(expense.id, {
+      status: 'error',
+      message: 'Receipts were not found in storage. Attach them again before uploading.',
+    });
+    void updateReceiptUI(expense);
+    throw new Error('No stored receipts available for upload');
+  }
 
   const formData = new FormData();
   formData.append('reportId', reportId);
   formData.append('expenseId', expense.id);
-  files.forEach((file) => {
-    formData.append('files', file, file.name);
+  stored.forEach(({ metadata: meta, blob }) => {
+    const fileName = meta.fileName || 'receipt';
+    let uploadBlob = blob;
+    if (!(uploadBlob instanceof File)) {
+      try {
+        uploadBlob = new File([blob], fileName, {
+          type: meta.contentType || 'application/octet-stream',
+          lastModified: meta.lastModified || Date.now(),
+        });
+      } catch (error) {
+        uploadBlob = blob;
+      }
+    }
+    formData.append('files', uploadBlob, fileName);
   });
 
   let response;
@@ -1033,7 +1209,7 @@ const uploadReceiptsForExpense = async (expense, reportId) => {
       status: 'error',
       message: 'Network error while uploading receipts. Try again.',
     });
-    updateReceiptUI(expense);
+    void updateReceiptUI(expense);
     throw error;
   }
 
@@ -1055,7 +1231,7 @@ const uploadReceiptsForExpense = async (expense, reportId) => {
       status: 'error',
       message: errorMessage,
     });
-    updateReceiptUI(expense);
+    void updateReceiptUI(expense);
     throw new Error(`Receipt upload failed with status ${response.status}`);
   }
 
@@ -1070,8 +1246,15 @@ const uploadReceiptsForExpense = async (expense, reportId) => {
     ? body.receipts.map(normalizeReceiptResponse).filter(Boolean)
     : [];
 
+  const retained = ensureReceiptArray(expense).filter((receipt) => !receipt.draftReceiptId);
+  expense.receipts = retained;
   mergeReceiptMetadata(expense, uploadedReceipts);
+  revokeObjectUrlsForExpense(expense.id);
   pendingReceiptFiles.delete(expense.id);
+  syncStoredReceiptMetadata();
+  await deleteReceipts(state.meta?.draftId, expense.id, metadata.map((item) => item.id)).catch((error) => {
+    console.warn('Unable to remove uploaded receipts from storage', error);
+  });
   receiptUploadState.set(expense.id, {
     status: 'success',
     message:
@@ -1079,7 +1262,8 @@ const uploadReceiptsForExpense = async (expense, reportId) => {
         ? 'Receipt uploaded successfully'
         : `${uploadedReceipts.length} receipts uploaded successfully`,
   });
-  updateReceiptUI(expense);
+  void saveState(state);
+  void updateReceiptUI(expense);
 };
 
 const uploadPendingReceipts = async (reportId) => {
@@ -1096,7 +1280,7 @@ const uploadPendingReceipts = async (reportId) => {
   }
 
   if (uploads.length) {
-    saveState(state);
+    void saveState(state);
   }
 };
 
@@ -1171,8 +1355,6 @@ const finalizeSubmit = async () => {
       successMessage: 'Report saved locally. Attach receipts and submit once you are back online.',
     });
 
-    pendingReceiptFiles.clear();
-    receiptUploadState.clear();
     submitting = false;
     elements.finalizeSubmit?.removeAttribute('disabled');
     return;
@@ -1225,7 +1407,7 @@ const finalizeSubmit = async () => {
         'error'
       );
     }
-    saveState(state);
+    void saveState(state);
   } finally {
     submitting = false;
     elements.finalizeSubmit?.removeAttribute('disabled');

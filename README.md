@@ -58,7 +58,7 @@ The application registers a service worker that precaches the core HTML, CSS, Ja
 
 ### Offline-only mode
 
-When the deployment environment should never attempt to contact the API (for example, during training or on kiosks without internet access) enable offline-only mode. This hides the API key controls, disables receipt uploads, and changes the finalize action to save reports locally instead of sending them to the network.
+When the deployment environment should never attempt to contact the API (for example, during training or on kiosks without internet access) enable offline-only mode. This hides the API key controls and changes the finalize action to save reports locally instead of sending them to the network. Receipt files selected while offline are stored in the browser using IndexedDB and rendered as downloadable links so they can be shared or uploaded later when connectivity is restored.
 
 Choose one of the following configuration options before loading `src/main.js`:
 
@@ -73,7 +73,18 @@ Choose one of the following configuration options before loading `src/main.js`:
   </script>
   ```
 
-In offline-only mode, pressing **Finalize & save locally** serializes the report payload, stores it in the local history drawer (persisted in `localStorage`), and shows a confirmation message so finance teams can transfer the data manually later.
+In offline-only mode, pressing **Finalize & save locally** serializes the report payload, stores it in the local history drawer (persisted in `localStorage`), and shows a confirmation message so finance teams can transfer the data manually later. Any receipts that were attached remain stored locally and continue to be listed alongside the report until the draft is cleared.
+
+### Receipt storage limits and cleanup
+
+Receipts are persisted in IndexedDB under the current draft ID so that uploads can resume after a page refresh or reconnection. If IndexedDB is unavailable (for example, in hardened browser profiles) the app falls back to the File System Access API's origin-private file system when supported, ensuring the files remain available offline. Each individual file is limited to 10&nbsp;MB, matching the validation enforced by the upload form. Stored blobs are removed automatically when:
+
+- An expense is deleted from the draft
+- Receipts are uploaded successfully to the server
+- The draft is finalized (either online or offline) and a new draft is created
+- The **Clear draft** action is invoked
+
+If the browser denies IndexedDB access, receipt uploads will surface an error instructing the user to reattach the files after granting storage permission.
 
 ## Google Cloud deployment pipeline
 
