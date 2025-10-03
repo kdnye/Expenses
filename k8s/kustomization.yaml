@@ -4,5 +4,5 @@ resources:
   - deployment.yaml
   - service.yaml
 images:
-  - name: LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE
+  - name: LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/expenses-api
     newTag: TAG
