@@ -17,8 +17,25 @@ spec:
       containers:
         - name: api
           image: LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/expenses-api:TAG
+          command: ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
           ports:
             - containerPort: 3000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: expenses-api-secrets
+                  key: DATABASE_URL
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: expenses-api-secrets
+                  key: API_KEY
+            - name: ADMIN_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: expenses-api-secrets
+                  key: ADMIN_JWT_SECRET
           resources:
             requests:
               cpu: 50m

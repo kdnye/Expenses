@@ -15,6 +15,32 @@ A lightweight web application for preparing Freight Services expense reports wit
 For a full operational handbook—including architecture notes, onboarding checklists, and the official Freight Services expense reimbursement policy—see [`docs/OPERATIONS_GUIDE.md`](docs/OPERATIONS_GUIDE.md).
 
 ## Getting started
+
+### Run the full stack with Docker Compose
+
+1. Create a `.env` file in the repository root that at minimum defines the API secrets:
+   ```bash
+   API_KEY="local-dev-api-key"
+   ADMIN_JWT_SECRET="replace-with-a-long-random-string"
+   ```
+   You can also override the default Postgres credentials exposed by `docker-compose.yml` by setting `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` in the same file. The Compose configuration injects everything into the API container and derives `DATABASE_URL` automatically.
+2. Build and start the stack:
+   ```bash
+   docker compose up --build
+   ```
+   The API waits for Postgres to become healthy, executes `npx prisma migrate deploy` to apply pending migrations, and then launches `node dist/index.js`.
+3. Visit [http://localhost:3000](http://localhost:3000) to access the combined API and single-page application. The Postgres container publishes port `5432` so tools like `psql` can connect for inspection or local debugging.
+
+To create new Prisma migrations during development, run:
+
+```bash
+docker compose run --rm api npx prisma migrate dev --name <migration-name>
+```
+
+After editing the schema and generating a migration, commit the new files in `server/prisma/migrations/` so they are deployed in other environments.
+
+### Frontend-only preview
+
 1. Serve the project with any static HTTP server (for example `python -m http.server 8000`).
 2. Open the site in your browser and start adding expenses.
 3. Copy the generated preview text into the company expense template when you are done.
@@ -51,6 +77,38 @@ docker run --rm -p 8080:8080 expenses-web:local
 ```
 
 The site will be served at http://localhost:8080.
+
+## Kubernetes database configuration
+
+The `k8s/` manifests now include a `StatefulSet` (`postgres-statefulset.yaml`) that provisions an in-cluster PostgreSQL 15 instance with persistent storage plus the secrets required by both the database and API deployments. Apply the manifests with Kustomize:
+
+```bash
+kubectl apply -k k8s/
+```
+
+Before deploying to a shared environment, replace the placeholder values in `k8s/api-secret.yaml` and `k8s/postgres-secret.yaml` or create the secrets through your preferred secret manager:
+
+```bash
+kubectl create secret generic expenses-api-secrets \
+  --from-literal=DATABASE_URL="postgresql://<user>:<password>@<host>:5432/expenses?schema=public" \
+  --from-literal=API_KEY="<api-key>" \
+  --from-literal=ADMIN_JWT_SECRET="<jwt-secret>"
+```
+
+Point `DATABASE_URL` at the internal service (`expenses-postgres`) for the bundled StatefulSet or swap the hostname for a managed database endpoint when you move to production. The API deployment reads all sensitive configuration from the `expenses-api-secrets` Secret so you can rotate credentials without modifying the manifest.
+
+If you are using a managed PostgreSQL offering, omit `postgres-secret.yaml` and `postgres-statefulset.yaml` from your Kustomize overlay and configure `DATABASE_URL` to reference the managed instance directly.
+
+Similarly, you can create the database credential secret at deployment time instead of editing the checked-in file:
+
+```bash
+kubectl create secret generic expenses-postgres-credentials \
+  --from-literal=POSTGRES_DB="expenses" \
+  --from-literal=POSTGRES_USER="<db-user>" \
+  --from-literal=POSTGRES_PASSWORD="<db-password>"
+```
+
+The Kubernetes deployment mirrors the Compose behavior by running `npx prisma migrate deploy` before starting the Node.js server, ensuring each rollout applies pending migrations automatically. For zero-downtime upgrades with large migrations, consider running the deploy step manually before scaling up new pods.
 
 ## Offline support
 
