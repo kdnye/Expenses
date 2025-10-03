@@ -78,6 +78,45 @@ docker run --rm -p 8080:8080 expenses-web:local
 
 The site will be served at http://localhost:8080.
 
+## Cloud Run static hosting
+
+### Manual deployment
+
+Use the following sequence to build, push, and deploy the static frontend to Google Cloud Run. Replace the sample identifiers with values from your project:
+
+```bash
+export PROJECT_ID="my-expenses-project"
+export REGION="us-east4"
+export GAR_LOCATION="us-east4"
+export REPOSITORY="expenses"
+export SERVICE="expenses"
+export IMAGE_NAME="expenses-frontend"
+export IMAGE_TAG="$(git rev-parse --short HEAD)"
+export IMAGE_URI="${GAR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+docker build -t "$IMAGE_URI" .
+docker push "$IMAGE_URI"
+
+gcloud run deploy "$SERVICE" \
+  --project "$PROJECT_ID" \
+  --region "$REGION" \
+  --image "$IMAGE_URI" \
+  --allow-unauthenticated \
+  --platform managed
+```
+
+If you manage Cloud Run through a declarative YAML file, update the `spec.template.spec.containers[0].image` field with `IMAGE_URI` before calling `gcloud run services replace`.
+
+### GitHub Actions workflow
+
+The repository includes a workflow (`.github/workflows/cloud-run-frontend.yml`) that mirrors the manual steps above. On each push to `main`, the workflow:
+
+1. Authenticates to Google Cloud via Workload Identity Federation.
+2. Builds the frontend container with the commit SHA as the tag and pushes it to Artifact Registry.
+3. Deploys the image to the configured Cloud Run service and promotes the revision to 100% traffic.
+
+Configure the project-specific values described in the [GitHub configuration](#github-configuration) section to enable the pipeline.
+
 ## Kubernetes database configuration
 
 The `k8s/` manifests now include a `StatefulSet` (`postgres-statefulset.yaml`) that provisions an in-cluster PostgreSQL 15 instance with persistent storage plus the secrets required by both the database and API deployments. Apply the manifests with Kustomize:
@@ -114,15 +153,19 @@ The Kubernetes deployment mirrors the Compose behavior by running `npx prisma mi
 
 The application registers a service worker that precaches the core HTML, CSS, JavaScript, and manifest assets. Load the site once while online so the service worker can install; subsequent visits (or reloads) will continue to work even without a network connection, using the cached assets for requests.
 
-## Google Cloud deployment pipeline
+## Google Cloud deployment pipelines
 
-This repository contains a GitHub Actions workflow (`.github/workflows/google.yml`) that builds the Docker image, pushes it to Google Artifact Registry, and deploys the container to Google Kubernetes Engine (GKE) using the manifests in the `k8s/` directory.
+This repository provides two GitHub Actions workflows:
+
+- `.github/workflows/google.yml` builds the full-stack container and deploys it to Google Kubernetes Engine (GKE) using the manifests in `k8s/`.
+- `.github/workflows/cloud-run-frontend.yml` builds the static frontend container and deploys it to Cloud Run.
 
 ### One-time Google Cloud setup
 
 1. **Enable required APIs** in your Google Cloud project:
    - Artifact Registry (`artifactregistry.googleapis.com`)
    - Google Kubernetes Engine (`container.googleapis.com`)
+   - Cloud Run Admin API (`run.googleapis.com`)
    - IAM Credentials API (`iamcredentials.googleapis.com`)
 2. **Create infrastructure** (replace names with your preferred values):
    - Create an Artifact Registry *Docker* repository, e.g. `expenses` in region `us-central1`.
@@ -130,16 +173,19 @@ This repository contains a GitHub Actions workflow (`.github/workflows/google.ym
 3. **Create a dedicated service account** (for example `github-actions@<PROJECT_ID>.iam.gserviceaccount.com`) and grant it the following roles:
    - `roles/artifactregistry.writer`
    - `roles/container.developer`
+   - `roles/run.admin`
 4. **Configure Workload Identity Federation** so GitHub can impersonate the service account without long-lived keys:
    - Create a Workload Identity Pool and Provider following the [google-github-actions/auth documentation](https://github.com/google-github-actions/auth#setting-up-workload-identity-federation).
    - Authorize the provider to impersonate the service account you created in step 3.
-5. **Capture the identifiers** you will need for the workflow:
+5. **Capture the identifiers** you will need for the workflows:
    - Google Cloud project ID (e.g. `my-expenses-project`)
    - Artifact Registry location (e.g. `us-central1`)
    - Artifact Registry repository name (e.g. `expenses`)
    - GKE cluster name (e.g. `expenses-cluster`)
    - GKE cluster location (zone or region, e.g. `us-central1-c`)
    - Kubernetes deployment name (matches the metadata name in `k8s/deployment.yaml`, default `expenses-web`)
+   - Cloud Run service name (e.g. `expenses`)
+   - Cloud Run region (e.g. `us-east4`)
    - Workload Identity Provider resource path (e.g. `projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL>/providers/<PROVIDER>`)
    - Service account email (created in step 3)
 
@@ -147,19 +193,21 @@ This repository contains a GitHub Actions workflow (`.github/workflows/google.ym
 
 Add the following **repository variables** (Settings → Secrets and variables → Actions → Variables) so the workflow picks up your project-specific values without editing the workflow file:
 
-| Variable name | Example value |
-| ------------- | ------------- |
-| `GCP_PROJECT_ID` | `my-expenses-project` |
-| `GAR_LOCATION` | `us-central1` |
-| `GAR_REPOSITORY` | `expenses` |
-| `GKE_CLUSTER` | `expenses-cluster` |
-| `GKE_LOCATION` | `us-central1-c` |
-| `GKE_DEPLOYMENT_NAME` | `expenses-web` |
-| `WORKLOAD_IDENTITY_PROVIDER` | `projects/123456789/locations/global/workloadIdentityPools/github/providers/expenses` |
-| `WIF_SERVICE_ACCOUNT` | `github-actions@my-expenses-project.iam.gserviceaccount.com` |
+| Variable name | Used by | Example value |
+| ------------- | -------- | ------------- |
+| `GCP_PROJECT_ID` | Both | `my-expenses-project` |
+| `GAR_LOCATION` | Both | `us-central1` |
+| `GAR_REPOSITORY` | Both | `expenses` |
+| `WORKLOAD_IDENTITY_PROVIDER` | Both | `projects/123456789/locations/global/workloadIdentityPools/github/providers/expenses` |
+| `WIF_SERVICE_ACCOUNT` | Both | `github-actions@my-expenses-project.iam.gserviceaccount.com` |
+| `GKE_CLUSTER` | GKE only | `expenses-cluster` |
+| `GKE_LOCATION` | GKE only | `us-central1-c` |
+| `GKE_DEPLOYMENT_NAME` | GKE only | `expenses-web` |
+| `CLOUD_RUN_SERVICE` | Cloud Run only | `expenses` |
+| `CLOUD_RUN_REGION` | Cloud Run only | `us-east4` |
 
 > **Note:** GitHub repository *variables* are appropriate here because the values are not secrets. Use repository *secrets* instead if you prefer to keep the identifiers private.
 
-Once the variables are in place, pushes to the `main` branch will trigger the workflow to build the image, push it to Artifact Registry, and deploy the new version to your cluster using the manifests in `k8s/`.
+Once the variables are in place, pushes to the `main` branch will trigger the workflows to build and publish updated containers. The GKE workflow rolls out the API + frontend bundle, while the Cloud Run workflow updates the static frontend-only service.
 
 You can inspect or customize the Kubernetes manifests under `k8s/` to tune replica counts, resource requests/limits, or service type.

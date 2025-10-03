@@ -66,6 +66,37 @@ npm test
 
 Ensure Workload Identity Federation is configured so GitHub Actions can impersonate the Google Cloud service account without static keys (see `README.md` for step-by-step instructions).
 
+#### Cloud Run workflow
+
+Use Cloud Run when you need to host only the static frontend (for example, if the API lives elsewhere or the site is purely client-side):
+
+1. Build the container locally and push it to Artifact Registry:
+   ```bash
+   export PROJECT_ID="my-expenses-project"
+   export REGION="us-east4"
+   export GAR_LOCATION="us-east4"
+   export REPOSITORY="expenses"
+   export SERVICE="expenses"
+   export IMAGE_NAME="expenses-frontend"
+   export IMAGE_TAG="$(git rev-parse --short HEAD)"
+   export IMAGE_URI="${GAR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+   docker build -t "$IMAGE_URI" .
+   docker push "$IMAGE_URI"
+   ```
+2. Deploy the pushed image:
+   ```bash
+   gcloud run deploy "$SERVICE" \
+     --project "$PROJECT_ID" \
+     --region "$REGION" \
+     --image "$IMAGE_URI" \
+     --allow-unauthenticated \
+     --platform managed
+   ```
+3. If you manage the service via YAML, update the `spec.template.spec.containers[0].image` field and run `gcloud run services replace` to promote the revision.
+
+The GitHub Actions workflow `.github/workflows/cloud-run-frontend.yml` automates the same steps whenever you push to `main`. Configure the repository variables described in `README.md` (`CLOUD_RUN_SERVICE`, `CLOUD_RUN_REGION`, etc.) to enable it.
+
 ## 4. Frontend architecture
 
 - **State management**: `src/storage.js` persists a normalized report state keyed by `STORAGE_KEY`. Fresh sessions derive from `constants.DEFAULT_STATE`.
