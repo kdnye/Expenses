@@ -60,6 +60,22 @@ npm run prisma:migrate
 npm run prisma:deploy
 ```
 
+## Container image
+
+The API can be packaged into a single container that serves both the JSON
+endpoints and the static single-page application. Build the image from the
+repository root by targeting the multi-stage Dockerfile in this workspace:
+
+```bash
+docker build -t expenses-api:local -f server/Dockerfile .
+```
+
+The resulting image exposes port `3000` and runs `node dist/index.js`. Configure
+the container by providing the environment variables documented above&mdash;at a
+minimum `DATABASE_URL`, `API_KEY`, and `ADMIN_JWT_SECRET` must be set so that the
+server can connect to PostgreSQL, authenticate report submissions, and secure
+administrator sessions.
+
 ## Admin authentication
 
 The server exposes administrator endpoints under `/api/admin/*` and an SPA at `/admin` for finance users. Authentication uses
