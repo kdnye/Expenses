@@ -2,10 +2,11 @@ import { EXPENSE_TYPES, IRS_RATE, MEAL_LIMITS, headerBindings } from './constant
 import { loadState, saveState, createFreshState } from './storage.js';
 import buildReportPayload, { calculateTotals } from './reportPayload.js';
 import { fmtCurrency, parseNumber, uuid } from './utils.js';
-import { buildApiUrl } from './config.js';
+import { buildApiUrl, isOfflineOnly } from './config.js';
 
 const state = loadState();
 const expenseRows = new Map();
+const offlineOnly = isOfflineOnly();
 const SUBMIT_ENDPOINT = buildApiUrl('/api/reports');
 const RECEIPT_UPLOAD_ENDPOINT = buildApiUrl('/api/receipts');
 const MAX_RECEIPT_BYTES = 10 * 1024 * 1024; // 10 MB limit per file.
@@ -93,6 +94,27 @@ const elements = {
   apiKeyRemember: document.querySelector('#field_api_key_remember'),
   apiKeyStatus: document.querySelector('#apiKeyStatus'),
 };
+
+const applyOfflineUiDefaults = () => {
+  const apiCard = document.getElementById('apiAccessCard');
+  if (apiCard) {
+    apiCard.hidden = true;
+    apiCard.setAttribute('aria-hidden', 'true');
+  }
+
+  if (elements.finalizeSubmit) {
+    elements.finalizeSubmit.textContent = 'Finalize & save locally';
+    elements.finalizeSubmit.title = 'Creates a finalized copy stored on this device.';
+  }
+
+  if (document.body) {
+    document.body.classList.add('offline-only');
+  }
+};
+
+if (offlineOnly) {
+  applyOfflineUiDefaults();
+}
 
 const sanitizedApiKey = () => apiKey.trim();
 
@@ -282,6 +304,19 @@ const updateReceiptUI = (expense) => {
   const pending = pendingReceiptFiles.get(expense.id) || [];
   const status = receiptUploadState.get(expense.id);
   renderReceiptList(expense);
+
+  if (offlineOnly) {
+    const uploaded = ensureReceiptArray(expense);
+    if (uploaded.length) {
+      const label = uploaded.length === 1
+        ? '1 receipt available from previous uploads'
+        : `${uploaded.length} receipts available from previous uploads`;
+      setReceiptStatus(expense.id, label, 'success');
+    } else {
+      setReceiptStatus(expense.id, 'Receipt uploads are unavailable in offline mode.', 'info');
+    }
+    return;
+  }
 
   if (status) {
     setReceiptStatus(expense.id, status.message, status.status);
@@ -711,7 +746,19 @@ const buildRow = (expense) => {
     persistAndRefresh(expense);
   });
 
+  if (receiptInput) {
+    receiptInput.disabled = offlineOnly;
+    if (offlineOnly) {
+      receiptInput.title = 'Receipts can be attached once you are back online.';
+    }
+  }
+
   receiptInput?.addEventListener('change', () => {
+    if (offlineOnly) {
+      receiptInput.value = '';
+      setReceiptStatus(expense.id, 'Receipts can be attached once you are back online.', 'info');
+      return;
+    }
     const files = Array.from(receiptInput.files || []);
     receiptInput.value = '';
     if (!files.length) return;
@@ -892,6 +939,24 @@ const buildHistoryEntry = (payload, responseData) => {
   };
 };
 
+const applyFinalizeSuccessState = (historyEntry, { mode, successMessage }) => {
+  state.history.push(historyEntry);
+
+  const freshState = createFreshState();
+  state.header = { ...freshState.header };
+  state.expenses = [];
+  state.meta = { ...freshState.meta, lastSavedMode: mode, lastSavedAt: new Date().toISOString() };
+
+  clearExpensesUI();
+  addExpense();
+  resetHeaderInputs();
+  updateTotals();
+  updatePreview();
+
+  saveState(state, { mode });
+  setSubmissionFeedback(successMessage, 'success');
+};
+
 const hasPendingReceiptUploads = () => {
   for (const files of pendingReceiptFiles.values()) {
     if (Array.isArray(files) && files.length) {
@@ -1056,28 +1121,33 @@ const finalizeSubmit = async () => {
 
   const finalizedAt = new Date();
 
-  if (!hasApiKey()) {
+  if (!offlineOnly && !hasApiKey()) {
     setSubmissionFeedback('Enter the API access key provided by Finance before submitting.', 'error');
     return;
   }
 
   submitting = true;
   elements.finalizeSubmit?.setAttribute('disabled', 'disabled');
-  setSubmissionFeedback(
-    hasPendingReceiptUploads() ? 'Uploading receipts…' : 'Preparing submission…',
-    'info',
-  );
+  const pendingUploads = hasPendingReceiptUploads();
+  const preparingMessage = offlineOnly
+    ? 'Preparing local report…'
+    : pendingUploads
+    ? 'Uploading receipts…'
+    : 'Preparing submission…';
+  setSubmissionFeedback(preparingMessage, 'info');
 
-  try {
-    if (hasPendingReceiptUploads()) {
-      await uploadPendingReceipts(reportId);
+  if (!offlineOnly) {
+    try {
+      if (pendingUploads) {
+        await uploadPendingReceipts(reportId);
+      }
+    } catch (error) {
+      console.error('Receipt upload failed', error);
+      setSubmissionFeedback('Receipt upload failed. Check the highlighted expenses and try again.', 'error');
+      submitting = false;
+      elements.finalizeSubmit?.removeAttribute('disabled');
+      return;
     }
-  } catch (error) {
-    console.error('Receipt upload failed', error);
-    setSubmissionFeedback('Receipt upload failed. Check the highlighted expenses and try again.', 'error');
-    submitting = false;
-    elements.finalizeSubmit?.removeAttribute('disabled');
-    return;
   }
 
   let payload;
@@ -1085,6 +1155,24 @@ const finalizeSubmit = async () => {
     payload = buildReportPayload(state, { reportId, finalizedAt });
   } catch (error) {
     setSubmissionFeedback(error.message || 'Unable to prepare submission. Check required fields and try again.', 'error');
+    submitting = false;
+    elements.finalizeSubmit?.removeAttribute('disabled');
+    return;
+  }
+
+  if (offlineOnly) {
+    const historyEntry = {
+      ...buildHistoryEntry(payload, null),
+      offline: true,
+      offlinePayload: JSON.stringify(payload, null, 2),
+    };
+    applyFinalizeSuccessState(historyEntry, {
+      mode: 'finalized-offline',
+      successMessage: 'Report saved locally. Attach receipts and submit once you are back online.',
+    });
+
+    pendingReceiptFiles.clear();
+    receiptUploadState.clear();
     submitting = false;
     elements.finalizeSubmit?.removeAttribute('disabled');
     return;
@@ -1123,23 +1211,12 @@ const finalizeSubmit = async () => {
     }
 
     const historyEntry = buildHistoryEntry(payload, responseBody);
-    state.history.push(historyEntry);
-
-    const freshState = createFreshState();
-    state.header = { ...freshState.header };
-    state.expenses = [];
-    state.meta = { ...freshState.meta, lastSavedMode: 'finalized', lastSavedAt: new Date().toISOString() };
-
-    clearExpensesUI();
-    addExpense();
-    resetHeaderInputs();
-    updateTotals();
-    updatePreview();
-
-    saveState(state, { mode: 'finalized' });
-
     const confirmationId = historyEntry.serverId ? `Confirmation ID: ${historyEntry.serverId}.` : 'Submission recorded.';
-    setSubmissionFeedback(`Report submitted successfully. ${confirmationId}`, 'success');
+
+    applyFinalizeSuccessState(historyEntry, {
+      mode: 'finalized',
+      successMessage: `Report submitted successfully. ${confirmationId}`,
+    });
   } catch (error) {
     console.error('Report submission failed', error);
     if (!submissionHandledError) {
@@ -1175,7 +1252,9 @@ document.addEventListener('visibilitychange', () => {
 });
 
 const init = () => {
-  initApiAccessControls();
+  if (!offlineOnly) {
+    initApiAccessControls();
+  }
   initHeaderBindings();
   restoreExpenses();
   initAddButton();
@@ -1192,3 +1271,5 @@ if ('serviceWorker' in navigator) {
       console.error('Service worker registration failed:', error);
     });
 }
+
+export { finalizeSubmit };

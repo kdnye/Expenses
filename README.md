@@ -56,6 +56,25 @@ The site will be served at http://localhost:8080.
 
 The application registers a service worker that precaches the core HTML, CSS, JavaScript, and manifest assets. Load the site once while online so the service worker can install; subsequent visits (or reloads) will continue to work even without a network connection, using the cached assets for requests.
 
+### Offline-only mode
+
+When the deployment environment should never attempt to contact the API (for example, during training or on kiosks without internet access) enable offline-only mode. This hides the API key controls, disables receipt uploads, and changes the finalize action to save reports locally instead of sending them to the network.
+
+Choose one of the following configuration options before loading `src/main.js`:
+
+- Add a meta tag to the HTML shell:
+  ```html
+  <meta name="fsi-expenses-offline-only" content="true" />
+  ```
+- Or set the global configuration flag:
+  ```html
+  <script>
+    window.__FSI_EXPENSES_CONFIG__ = { offlineOnly: true };
+  </script>
+  ```
+
+In offline-only mode, pressing **Finalize & save locally** serializes the report payload, stores it in the local history drawer (persisted in `localStorage`), and shows a confirmation message so finance teams can transfer the data manually later.
+
 ## Google Cloud deployment pipeline
 
 This repository contains a GitHub Actions workflow (`.github/workflows/google.yml`) that builds the Docker image, pushes it to Google Artifact Registry, and deploys the container to Google Kubernetes Engine (GKE) using the manifests in the `k8s/` directory.

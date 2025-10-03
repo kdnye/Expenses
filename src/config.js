@@ -1,8 +1,10 @@
 const META_NAME = 'fsi-expenses-api-base';
 const LEGACY_GLOBAL_KEY = '__FSI_EXPENSES_API_BASE__';
 const GLOBAL_CONFIG_KEY = '__FSI_EXPENSES_CONFIG__';
+const OFFLINE_META_NAME = 'fsi-expenses-offline-only';
 
 let cachedApiBase;
+let cachedOfflineOnly;
 
 const isString = (value) => typeof value === 'string';
 
@@ -13,6 +15,35 @@ const readMetaApiBase = () => {
   const meta = document.querySelector(`meta[name="${META_NAME}"]`);
   const content = meta?.getAttribute('content');
   return isString(content) ? content : '';
+};
+
+const parseBoolean = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return ['1', 'true', 'yes', 'on'].includes(normalized);
+  }
+  return false;
+};
+
+const readMetaOfflineOnly = () => {
+  if (typeof document === 'undefined') {
+    return false;
+  }
+  const meta = document.querySelector(`meta[name="${OFFLINE_META_NAME}"]`);
+  const content = meta?.getAttribute('content');
+  return parseBoolean(content);
+};
+
+const readGlobalOfflineOnly = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  const config = window[GLOBAL_CONFIG_KEY];
+  if (config && typeof config === 'object' && 'offlineOnly' in config) {
+    return parseBoolean(config.offlineOnly);
+  }
+  return false;
 };
 
 const readGlobalApiBase = () => {
@@ -103,4 +134,18 @@ export const buildApiUrl = (path = '') => {
 
   const normalizedBase = apiBase === '/' ? '' : apiBase;
   return `${normalizedBase}${normalizedPath}`.replace(/\/\/{2,}/g, '/');
+};
+
+export const isOfflineOnly = () => {
+  if (cachedOfflineOnly !== undefined) {
+    return cachedOfflineOnly;
+  }
+
+  cachedOfflineOnly = readMetaOfflineOnly() || readGlobalOfflineOnly();
+  return cachedOfflineOnly;
+};
+
+export const resetConfigCacheForTests = () => {
+  cachedApiBase = undefined;
+  cachedOfflineOnly = undefined;
 };
