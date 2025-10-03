@@ -1,5 +1,6 @@
 import { STORAGE_KEY, cloneDefaultState, DEFAULT_STATE } from './constants.js';
 import { uuid } from './utils.js';
+import { listReceiptMetadataForDraft, clearReceiptsForDraft } from './receiptStorage.js';
 
 const normalizeState = (rawState = {}) => {
   const base = cloneDefaultState();
@@ -43,23 +44,73 @@ const getLocalStorage = () => {
 
 const storage = getLocalStorage();
 
-export const loadState = () => {
-  if (!storage) {
-    return cloneDefaultState();
-  }
-
-  try {
-    const raw = storage.getItem(STORAGE_KEY);
-    if (!raw) return cloneDefaultState();
-    const parsed = JSON.parse(raw);
-    return normalizeState(parsed);
-  } catch (error) {
-    console.warn('Unable to load saved expense state', error);
-    return normalizeState(DEFAULT_STATE);
-  }
+const buildStoredReceiptIndex = (metadataMap) => {
+  const result = {};
+  metadataMap.forEach((list, expenseId) => {
+    if (!Array.isArray(list) || !list.length) return;
+    result[expenseId] = list.map((item) => ({
+      id: item.id,
+      expenseId: item.expenseId,
+      fileName: item.fileName,
+      fileSize: item.fileSize,
+      contentType: item.contentType,
+      lastModified: item.lastModified,
+    }));
+  });
+  return result;
 };
 
-export const saveState = (state, { mode = 'draft' } = {}) => {
+const mergeStoredMetadataIntoState = (state, metadataMap) => {
+  const storedIndex = buildStoredReceiptIndex(metadataMap);
+  state.meta.storedReceipts = storedIndex;
+
+  if (!Array.isArray(state.expenses)) return;
+  state.expenses = state.expenses.map((expense) => {
+    const receipts = Array.isArray(expense.receipts) ? [...expense.receipts] : [];
+    const stored = storedIndex[expense.id] || [];
+    const filtered = receipts.filter((receipt) => !stored.find((meta) => meta.id === receipt.draftReceiptId));
+    const enriched = stored.map((meta) => ({
+      draftReceiptId: meta.id,
+      fileName: meta.fileName,
+      fileSize: meta.fileSize,
+      contentType: meta.contentType,
+      lastModified: meta.lastModified,
+    }));
+    return { ...expense, receipts: [...filtered, ...enriched] };
+  });
+};
+
+export const loadState = async () => {
+  if (!storage) {
+    const base = cloneDefaultState();
+    base.meta.storedReceipts = {};
+    return base;
+  }
+
+  let parsed = null;
+  try {
+    const raw = storage.getItem(STORAGE_KEY);
+    if (raw) {
+      parsed = JSON.parse(raw);
+    }
+  } catch (error) {
+    console.warn('Unable to load saved expense state', error);
+  }
+
+  const state = normalizeState(parsed || DEFAULT_STATE);
+  let metadataMap = new Map();
+  try {
+    metadataMap = await listReceiptMetadataForDraft(state.meta?.draftId);
+  } catch (error) {
+    console.warn('Unable to read stored receipts for draft', error);
+    metadataMap = new Map();
+  }
+
+  mergeStoredMetadataIntoState(state, metadataMap);
+  return state;
+};
+
+export const saveState = async (state, { mode = 'draft' } = {}) => {
   if (!storage) return;
   if (!state.meta?.draftId) {
     state.meta = { ...state.meta, draftId: uuid() };
@@ -68,6 +119,15 @@ export const saveState = (state, { mode = 'draft' } = {}) => {
   state.meta.lastSavedMode = mode;
   state.meta.lastSavedAt = new Date().toISOString();
 
+  if (!state.meta.storedReceipts) {
+    try {
+      const metadataMap = await listReceiptMetadataForDraft(state.meta.draftId);
+      state.meta.storedReceipts = buildStoredReceiptIndex(metadataMap);
+    } catch (error) {
+      console.warn('Unable to sync stored receipt metadata before saving', error);
+    }
+  }
+
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
@@ -75,8 +135,19 @@ export const saveState = (state, { mode = 'draft' } = {}) => {
   }
 };
 
-export const clearDraft = () => {
+export const clearDraft = async () => {
   if (!storage) return;
+  try {
+    const raw = storage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const draftId = parsed?.meta?.draftId;
+      await clearReceiptsForDraft(draftId);
+    }
+  } catch (error) {
+    console.warn('Unable to purge stored receipts for draft', error);
+  }
+
   try {
     storage.removeItem(STORAGE_KEY);
   } catch (error) {
@@ -87,5 +158,6 @@ export const clearDraft = () => {
 export const createFreshState = () => {
   const state = cloneDefaultState();
   state.meta.draftId = uuid();
+  state.meta.storedReceipts = {};
   return state;
 };
