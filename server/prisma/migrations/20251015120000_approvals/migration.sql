@@ -7,9 +7,30 @@ CREATE TYPE "ApprovalStage" AS ENUM ('MANAGER', 'FINANCE');
 -- CreateEnum
 CREATE TYPE "ApprovalStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
 
--- AlterEnum
-ALTER TYPE "AdminRole" ADD VALUE IF NOT EXISTS 'MANAGER';
-ALTER TYPE "AdminRole" ADD VALUE IF NOT EXISTS 'FINANCE';
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'AdminRole'
+  ) THEN
+    CREATE TYPE "AdminRole" AS ENUM ('CFO', 'SUPER', 'ANALYST', 'MANAGER', 'FINANCE');
+  ELSE
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_enum
+      WHERE enumtypid = 'AdminRole'::regtype
+        AND enumlabel = 'MANAGER'
+    ) THEN
+      ALTER TYPE "AdminRole" ADD VALUE 'MANAGER';
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_enum
+      WHERE enumtypid = 'AdminRole'::regtype
+        AND enumlabel = 'FINANCE'
+    ) THEN
+      ALTER TYPE "AdminRole" ADD VALUE 'FINANCE';
+    END IF;
+  END IF;
+END $$;
 
 -- AlterTable
 ALTER TABLE "reports"
