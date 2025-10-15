@@ -1,14 +1,8 @@
 const CACHE_VERSION = 'expenses-cache-v3';
 const PRECACHE_URLS = [
   '/index.html',
-  '/styles.css',
   '/manifest.webmanifest',
   '/fsi-logo.png',
-  '/src/config.js',
-  '/src/constants.js',
-  '/src/main.js',
-  '/src/storage.js',
-  '/src/utils.js',
 ];
 
 self.addEventListener('install', (event) => {

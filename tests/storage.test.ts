@@ -100,11 +100,13 @@ describe('saveState and clearDraft', () => {
 
     const state = loadState();
 
-    saveState(state, { mode: 'final' });
+    const updated = saveState(state, { mode: 'final' });
 
-    expect(state.meta.draftId).toBe('new-draft-id');
-    expect(state.meta.lastSavedMode).toBe('final');
-    expect(state.meta.lastSavedAt).toMatch(/\d{4}-\d{2}-\d{2}T/);
+    expect(updated).not.toBe(state);
+    expect(updated.meta.draftId).toBe('new-draft-id');
+    expect(updated.meta.lastSavedMode).toBe('final');
+    expect(updated.meta.lastSavedAt).toMatch(/\d{4}-\d{2}-\d{2}T/);
+    expect(state.meta.draftId).not.toBe('new-draft-id');
     expect(setItem).toHaveBeenCalledWith(STORAGE_KEY, expect.stringContaining('"lastSavedMode":"final"'));
   });
 

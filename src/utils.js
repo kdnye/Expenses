@@ -15,3 +15,13 @@ export const uuid = () => {
   }
   return `id-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 10)}`;
 };
+
+export const formatFileSize = (bytes) => {
+  const size = Number(bytes);
+  if (!Number.isFinite(size) || size <= 0) return '';
+  if (size < 1024) return `${size} B`;
+  const kb = size / 1024;
+  if (kb < 1024) return `${kb.toFixed(kb >= 10 ? 0 : 1)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(mb >= 10 ? 1 : 2)} MB`;
+};

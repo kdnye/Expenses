@@ -74,9 +74,12 @@ local instance.
 
 ### Frontend-only preview
 
-1. Serve the project with any static HTTP server (for example `python -m http.server 8000`).
-2. Open the site in your browser and start adding expenses.
-3. Copy the generated preview text into the company expense template when you are done.
+1. Launch the Vite development server:
+   ```bash
+   npm run dev
+   ```
+2. Open the printed local URL in your browser and start adding expenses.
+3. When you are ready to inspect the production build, run `npm run build` followed by `npm run preview` to serve the optimized assets.
 
 Local storage persistence is optional; if the browser disables access, the app still functions without saving state between sessions.
 
@@ -89,7 +92,7 @@ When the API is hosted on a different domain or behind a reverse proxy prefix, p
   ```html
   <meta name="fsi-expenses-api-base" content="https://expenses-api.example.com" />
   ```
-- Define a global configuration object before loading `src/main.js` or `src/admin.js`:
+- Define a global configuration object before loading the main bundle (or `src/admin.js` for the finance console):
   ```html
   <script>
     window.__FSI_EXPENSES_CONFIG__ = { apiBaseUrl: 'https://expenses-api.example.com' };
