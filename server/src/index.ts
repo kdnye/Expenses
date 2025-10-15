@@ -1,9 +1,9 @@
-import dotenv from 'dotenv';
 import app from './app.js';
+import { getConfig } from './config.js';
 
-dotenv.config();
-
-const port = Number.parseInt(process.env.PORT ?? '3000', 10);
+const {
+  server: { port },
+} = getConfig();
 
 app.listen(port, () => {
   console.log(`API listening on port ${port}`);

@@ -27,6 +27,25 @@ npm install
 
 The devcontainer intentionally skips automatic installation, so run this command manually prior to executing tasks such as `npm test` or `npm run lint`.
 
+### Environment configuration
+
+Configuration values for both the frontend build and the backend API are loaded centrally by `server/src/config.ts`. Copy `.env.example` to `.env` and adjust the values for your environment before starting any servers:
+
+```bash
+cp .env.example .env
+```
+
+Key variables include:
+
+| Variable | Purpose |
+| --- | --- |
+| `ADMIN_JWT_SECRET` | Required secret used to sign administrator session cookies. |
+| `RECEIPT_MAX_BYTES` / `RECEIPT_MAX_FILES` | Upper bounds enforced by the receipt upload endpoint. |
+| `RECEIPT_STORAGE_PROVIDER` | Storage backend (`memory`, `s3`, `gcs`, or `gdrive`). |
+| `S3_*` / `GCS_*` / `GDRIVE_*` | Provider-specific settings for receipt storage integrations. |
+
+The defaults in `.env.example` keep uploads in memory. Switch to S3, Google Cloud Storage, or Google Drive by updating `RECEIPT_STORAGE_PROVIDER` and filling in the corresponding section of the file. Invalid or missing combinations are detected at startup so misconfiguration is caught early.
+
 ### Run the full stack with Docker Compose
 
 1. Create a `.env` file in the repository root that at minimum defines the administrator session secret:
