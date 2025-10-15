@@ -16,7 +16,6 @@ Create a `.env` file alongside `package.json` with the following keys:
 | --- | --- | --- |
 | `PORT` | No | Port used by the HTTP server (defaults to `3000`). |
 | `DATABASE_URL` | Yes | PostgreSQL connection string used by Prisma. Example: `postgresql://postgres:postgres@localhost:5432/expenses?schema=public`. |
-| `API_KEY` | Yes | Shared secret token that clients must provide in the `x-api-key` header when creating reports. |
 | `ADMIN_JWT_SECRET` | Yes | Secret string used to sign administrator session cookies. Use a long, random value. |
 | `RECEIPT_STORAGE_PROVIDER` | No | Receipt storage backend: `memory` (default), `s3`, `gcs`, or `gdrive`. |
 | `RECEIPT_MAX_BYTES` | No | Maximum allowed file size per receipt upload (defaults to 10&nbsp;MiB). |
@@ -72,9 +71,8 @@ docker build -t expenses-api:local -f server/Dockerfile .
 
 The resulting image exposes port `3000` and runs `node dist/index.js`. Configure
 the container by providing the environment variables documented above&mdash;at a
-minimum `DATABASE_URL`, `API_KEY`, and `ADMIN_JWT_SECRET` must be set so that the
-server can connect to PostgreSQL, authenticate report submissions, and secure
-administrator sessions.
+minimum `DATABASE_URL` and `ADMIN_JWT_SECRET` must be set so that the
+server can connect to PostgreSQL and secure administrator sessions.
 
 ## Admin authentication
 

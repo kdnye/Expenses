@@ -121,7 +121,7 @@ The GitHub Actions workflow `.github/workflows/cloud-run-frontend.yml` automates
 
 Routine maintenance tasks:
 
-- Rotate `API_KEY` and administrator credentials regularly.
+- Rotate administrator credentials regularly.
 - Monitor receipt storage quotas and lifecycle policies.
 - Keep Prisma migrations in sync with schema changes and run `npm run prisma:deploy` before deploying new releases.
 - Rebuild the static frontend and copy assets into `public/` whenever UI changes are made.
