@@ -53,6 +53,15 @@ docker compose -f docker-compose.yml up --build
 
 This variant runs the compiled server (`node dist/index.js`) inside the container instead of the watch mode used for local development.
 
+### Local PostgreSQL installation
+
+If you prefer to run PostgreSQL directly on your workstation instead of the
+bundled Docker container, follow the step-by-step guide in
+[`docs/POSTGRESQL_SETUP.md`](docs/POSTGRESQL_SETUP.md). The walkthrough covers
+installing PostgreSQL on macOS, Linux, and Windows, provisioning the expected
+database/role with `scripts/bootstrap-postgres.sh`, and wiring the API to the
+local instance.
+
 ### Frontend-only preview
 
 1. Serve the project with any static HTTP server (for example `python -m http.server 8000`).
