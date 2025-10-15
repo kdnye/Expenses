@@ -22,7 +22,6 @@ const importApp = async () => {
 
 describe('report submission', () => {
   beforeEach(() => {
-    process.env.API_KEY = 'report-key';
     reportCreate.mockReset();
     expenseCreateMany.mockReset();
     receiptFindMany.mockReset();
@@ -77,7 +76,6 @@ describe('report submission', () => {
 
     const response = await request(app)
       .post('/api/reports')
-      .set('x-api-key', 'report-key')
       .send(payload);
 
     expect(response.status).toBe(201);

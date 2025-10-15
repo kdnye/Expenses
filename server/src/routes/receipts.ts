@@ -7,7 +7,6 @@ import {
   RECEIPT_ALLOWED_MIME_PREFIXES,
   RECEIPT_ALLOWED_MIME_TYPES,
 } from '../lib/receiptStorage.js';
-import { authenticate } from '../middleware/authenticate.js';
 
 const MAX_FILE_SIZE = Number(process.env.RECEIPT_MAX_BYTES ?? 10 * 1024 * 1024);
 const MAX_FILE_COUNT = Number(process.env.RECEIPT_MAX_FILES ?? 5);
@@ -38,7 +37,7 @@ function isMimeAllowed(mime: string) {
   return RECEIPT_ALLOWED_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix));
 }
 
-router.post('/', authenticate, (req, res, next) => {
+router.post('/', (req, res, next) => {
   upload.array('files', MAX_FILE_COUNT)(req, res, async (err: unknown) => {
     if (err) {
       if (err instanceof multer.MulterError) {

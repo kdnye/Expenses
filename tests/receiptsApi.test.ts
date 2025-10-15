@@ -100,7 +100,6 @@ const importApp = async () => {
 
 describe('receipt uploads', () => {
   beforeEach(() => {
-    process.env.API_KEY = 'receipt-key';
     receiptCreate.mockReset();
     storageUpload.mockReset();
     storageGetDownloadUrl.mockReset();
@@ -121,7 +120,6 @@ describe('receipt uploads', () => {
 
     const response = await request(app)
       .post('/api/receipts')
-      .set('x-api-key', 'receipt-key')
       .field('reportId', 'rep-1')
       .field('expenseId', 'exp-1')
       .attach('files', Buffer.from('nope'), {
@@ -161,7 +159,6 @@ describe('receipt uploads', () => {
 
     const response = await request(app)
       .post('/api/receipts')
-      .set('x-api-key', 'receipt-key')
       .field('reportId', 'rep-1')
       .field('expenseId', 'exp-1')
       .attach('files', fileBuffer, {

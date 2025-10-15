@@ -26,11 +26,6 @@ spec:
                 secretKeyRef:
                   name: expenses-api-secrets
                   key: DATABASE_URL
-            - name: API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: expenses-api-secrets
-                  key: API_KEY
             - name: ADMIN_JWT_SECRET
               valueFrom:
                 secretKeyRef:

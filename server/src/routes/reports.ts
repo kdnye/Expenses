@@ -1,13 +1,12 @@
 import { Router } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { authenticate } from '../middleware/authenticate.js';
 import { reportSchema } from '../validators/reportSchema.js';
 import { ApprovalStageEnum } from '../lib/prismaEnums.js';
 
 const router = Router();
 
-router.post('/', authenticate, async (req, res, next) => {
+router.post('/', async (req, res, next) => {
   const parsed = reportSchema.safeParse(req.body);
 
   if (!parsed.success) {

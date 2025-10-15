@@ -3,7 +3,7 @@
 A full-stack web application for capturing, approving, and exporting Freight Services employee expenses with built-in policy safeguards.
 
 ## Features
-- Employees enter expenses in the browser and submit them directly to the API for long-term storage.
+- Employees enter expenses in the browser and submit them directly to the database through the bundled backend service.
 - Submissions are automatically flagged for manager and finance review with a two-stage approval workflow.
 - Inline policy reminders for travel, meals, and mileage reimbursements with automatic mileage calculations at the IRS rate.
 - Managers review incoming reports, record decisions, and unblock finance approvals through the shared admin console.
@@ -19,6 +19,12 @@ For a full operational handbook—including architecture notes, onboarding check
 
 ### Run the full stack with Docker Compose
 
+1. Create a `.env` file in the repository root that at minimum defines the administrator session secret:
+   ```bash
+   ADMIN_JWT_SECRET="replace-with-a-long-random-string"
+   ```
+   You can also override the default Postgres credentials exposed by `docker-compose.yml` by setting `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` in the same file. The Compose configuration injects everything into the API container and derives `DATABASE_URL` automatically.
+2. Build and start the stack:
 #### Development / Codespaces (`compose.yaml`)
 
 1. (Optional) Create a `.env` file in the repository root to override the defaults. Without one the stack boots with `API_KEY=local-dev-api-key`, `ADMIN_JWT_SECRET=dev-admin-secret`, and a PostgreSQL database named `expenses`.
@@ -57,7 +63,7 @@ Local storage persistence is optional; if the browser disables access, the app s
 
 ## Configuring the API endpoint
 
-By default the web client sends receipt uploads and report submissions to the same origin it was served from (for example `/api/reports`).
+By default the web client sends receipt uploads and report submissions to the same origin it was served from (for example `/api/reports`) so they persist directly to the shared database.
 When the API is hosted on a different domain or behind a reverse proxy prefix, provide the target base URL through one of the following options:
 
 - Add a meta tag to `index.html` (and `admin.html` for the finance console):
@@ -138,7 +144,6 @@ Before deploying to a shared environment, replace the placeholder values in `k8s
 ```bash
 kubectl create secret generic expenses-api-secrets \
   --from-literal=DATABASE_URL="postgresql://<user>:<password>@<host>:5432/expenses?schema=public" \
-  --from-literal=API_KEY="<api-key>" \
   --from-literal=ADMIN_JWT_SECRET="<jwt-secret>"
 ```
 
