@@ -7,6 +7,7 @@ const loginSubmit = document.querySelector('#loginSubmit');
 const exportCard = document.querySelector('#exportCard');
 const exportForm = document.querySelector('#exportForm');
 const downloadBtn = document.querySelector('#downloadBtn');
+const exportFormatSelect = document.querySelector('#exportFormat');
 const exportStatus = document.querySelector('#exportStatus');
 const logoutBtn = document.querySelector('#logoutBtn');
 const adminUserLabel = document.querySelector('#adminUser');
@@ -507,6 +508,10 @@ function setLoggedOut(message) {
   }
   hideStatus(exportStatus);
   hideStatus(approvalsStatus);
+  if (exportFormatSelect) {
+    exportFormatSelect.value = 'zip';
+    exportFormatSelect.disabled = false;
+  }
 }
 
 loginForm?.addEventListener('submit', async (event) => {
@@ -556,6 +561,7 @@ logoutBtn?.addEventListener('click', async () => {
   hideStatus(exportStatus);
   hideStatus(approvalsStatus);
   if (downloadBtn) downloadBtn.disabled = false;
+  if (exportFormatSelect) exportFormatSelect.disabled = false;
 
   try {
     const response = await fetch(buildApiUrl('/api/admin/logout'), {
@@ -607,6 +613,7 @@ exportForm?.addEventListener('submit', async (event) => {
   }
 
   const employees = parseEmployees(employeeFilterInput?.value ?? '');
+  const format = (exportFormatSelect?.value ?? 'zip').toLowerCase();
 
   const params = new URLSearchParams({ start, end });
   for (const employee of employees) {
@@ -614,12 +621,16 @@ exportForm?.addEventListener('submit', async (event) => {
   }
 
   if (downloadBtn) downloadBtn.disabled = true;
+  if (exportFormatSelect) exportFormatSelect.disabled = true;
   showStatus(exportStatus, 'Preparing download…', 'info');
 
   try {
-    const response = await fetch(buildApiUrl(`/api/admin/reports?${params.toString()}`), {
+    const endpoint = format === 'journal' ? '/api/admin/journal' : '/api/admin/reports';
+    const headers = format === 'journal' ? { accept: 'application/json' } : undefined;
+    const response = await fetch(buildApiUrl(`${endpoint}?${params.toString()}`), {
       method: 'GET',
-      credentials: 'include'
+      credentials: 'include',
+      ...(headers ? { headers } : {}),
     });
 
     if (!response.ok) {
@@ -629,24 +640,43 @@ exportForm?.addEventListener('submit', async (event) => {
       return;
     }
 
-    const blob = await response.blob();
-    const filename = filenameFromHeaders(response, `reports_${start}_${end}.zip`);
+    if (format === 'journal') {
+      const body = await response.json();
+      const prettyJson = JSON.stringify(body, null, 2);
+      const blob = new Blob([prettyJson], { type: 'application/json' });
+      const filename = `journal_${start}_${end}.json`;
 
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
 
-    showStatus(exportStatus, 'Export generated successfully.', 'success');
+      showStatus(exportStatus, 'Journal summary generated successfully.', 'success');
+    } else {
+      const blob = await response.blob();
+      const filename = filenameFromHeaders(response, `reports_${start}_${end}.zip`);
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+
+      showStatus(exportStatus, 'Export generated successfully.', 'success');
+    }
   } catch (error) {
     console.error(error);
     showStatus(exportStatus, 'Unexpected error while generating export.', 'error');
   } finally {
     if (downloadBtn) downloadBtn.disabled = false;
+    if (exportFormatSelect) exportFormatSelect.disabled = false;
   }
 });
 

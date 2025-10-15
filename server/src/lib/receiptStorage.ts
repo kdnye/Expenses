@@ -299,3 +299,11 @@ export const resetReceiptStorageCache = () => {
 
 export const RECEIPT_ALLOWED_MIME_PREFIXES = ['image/'];
 export const RECEIPT_ALLOWED_MIME_TYPES = new Set(['application/pdf']);
+
+export const __testHelpers = {
+  createMemoryStorage: () => new MemoryReceiptStorage(),
+  createS3Storage,
+  createGcsStorage,
+  createGoogleDriveStorage,
+  resetMemoryBucket: () => memoryBucket.clear(),
+};
