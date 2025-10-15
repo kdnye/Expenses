@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { getReceiptStorage } from '../lib/receiptStorage.js';
 import { requireAdmin, adminFinanceRoles } from '../middleware/adminAuth.js';
+import { parseDateBoundary } from '../lib/dateRange.js';
 import {
   ApprovalStageEnum,
   ReportStatusEnum,
@@ -19,16 +20,8 @@ const querySchema = z
     employees: z.union([z.string(), z.array(z.string())]).optional()
   })
   .transform((value) => {
-    const startDate = new Date(value.start);
-    const endDate = new Date(value.end);
-
-    if (Number.isNaN(startDate.getTime())) {
-      throw new Error('Invalid start date');
-    }
-
-    if (Number.isNaN(endDate.getTime())) {
-      throw new Error('Invalid end date');
-    }
+    const startDate = parseDateBoundary(value.start, 'start');
+    const endDate = parseDateBoundary(value.end, 'end');
 
     const employeesRaw = value.employees;
     const employees = Array.isArray(employeesRaw)

@@ -283,7 +283,9 @@ describe('admin authentication and exports', () => {
 
     const callArgs = reportFindMany.mock.calls.at(-1)?.[0];
     expect(callArgs?.where?.finalizedAt?.gte.toISOString()).toBe(new Date('2024-03-01').toISOString());
-    expect(callArgs?.where?.finalizedAt?.lte.toISOString()).toBe(new Date('2024-03-31').toISOString());
+    expect(callArgs?.where?.finalizedAt?.lte.toISOString()).toBe(
+      new Date('2024-03-31T23:59:59.999Z').toISOString()
+    );
     expect(callArgs?.where?.employeeEmail?.in).toEqual(['employee@example.com']);
   });
 
@@ -367,7 +369,7 @@ describe('admin authentication and exports', () => {
 
     expect(expenseFindMany).toHaveBeenCalledTimes(1);
     expect(journalResponse.body.start).toBe('2024-03-01T00:00:00.000Z');
-    expect(journalResponse.body.end).toBe('2024-03-31T00:00:00.000Z');
+    expect(journalResponse.body.end).toBe('2024-03-31T23:59:59.999Z');
     expect(journalResponse.body.totalsByCurrency).toEqual({ USD: '195.35', EUR: '20.00' });
     expect(journalResponse.body.unmappedCategories).toEqual(['bespoke']);
     expect(Array.isArray(journalResponse.body.employees)).toBe(true);
