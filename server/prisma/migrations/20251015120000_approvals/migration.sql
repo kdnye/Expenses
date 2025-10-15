@@ -10,22 +10,35 @@ CREATE TYPE "ApprovalStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_type WHERE typname = 'AdminRole'
+    SELECT 1 FROM pg_type
+    WHERE typname = 'AdminRole'
   ) THEN
     CREATE TYPE "AdminRole" AS ENUM ('CFO', 'SUPER', 'ANALYST', 'MANAGER', 'FINANCE');
-  ELSE
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_type
+    WHERE typname = 'AdminRole'
+  ) THEN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_enum
-      WHERE enumtypid = 'AdminRole'::regtype
-        AND enumlabel = 'MANAGER'
+      SELECT 1
+      FROM pg_enum e
+      JOIN pg_type t ON e.enumtypid = t.oid
+      WHERE t.typname = 'AdminRole'
+        AND e.enumlabel = 'MANAGER'
     ) THEN
       ALTER TYPE "AdminRole" ADD VALUE 'MANAGER';
     END IF;
 
     IF NOT EXISTS (
-      SELECT 1 FROM pg_enum
-      WHERE enumtypid = 'AdminRole'::regtype
-        AND enumlabel = 'FINANCE'
+      SELECT 1
+      FROM pg_enum e
+      JOIN pg_type t ON e.enumtypid = t.oid
+      WHERE t.typname = 'AdminRole'
+        AND e.enumlabel = 'FINANCE'
     ) THEN
       ALTER TYPE "AdminRole" ADD VALUE 'FINANCE';
     END IF;
