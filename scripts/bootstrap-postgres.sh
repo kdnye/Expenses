@@ -111,6 +111,6 @@ echo "PostgreSQL role '${DB_USER}' and database '${DB_NAME}' are ready."
 if (( RUN_MIGRATIONS )); then
   echo "Prisma migrations have been applied."
 else
-  echo "Run 'DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@<host>:${PGPORT:-5432}/${DB_NAME}?schema=${DB_SCHEMA}' npx prisma migrate deploy" \
+  echo "Run 'DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${PGHOST:-localhost}:${PGPORT:-5432}/${DB_NAME}?schema=${DB_SCHEMA}' npx prisma migrate deploy" \
        "to sync the schema once Node.js dependencies are installed."
 fi
