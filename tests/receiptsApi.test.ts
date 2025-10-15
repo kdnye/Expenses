@@ -18,27 +18,25 @@ const driveFilesGet = vi.fn();
 const googleAuthAccessTokenMock = vi.fn();
 
 vi.mock('@googleapis/drive', () => ({
-  google: {
-    auth: {
-      GoogleAuth: class {
-        options;
+  auth: {
+    GoogleAuth: class {
+      options;
 
-        constructor(options) {
-          this.options = options;
-        }
+      constructor(options) {
+        this.options = options;
+      }
 
-        async getAccessToken() {
-          return googleAuthAccessTokenMock();
-        }
+      async getAccessToken() {
+        return googleAuthAccessTokenMock();
       }
     },
-    drive: () => ({
-      files: {
-        create: driveFilesCreate,
-        get: driveFilesGet,
-      },
-    }),
   },
+  drive: () => ({
+    files: {
+      create: driveFilesCreate,
+      get: driveFilesGet,
+    },
+  }),
 }));
 
 vi.mock('../server/src/lib/receiptStorage.js', async () => {
