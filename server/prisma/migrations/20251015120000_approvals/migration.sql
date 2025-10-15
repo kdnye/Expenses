@@ -8,40 +8,45 @@ CREATE TYPE "ApprovalStage" AS ENUM ('MANAGER', 'FINANCE');
 CREATE TYPE "ApprovalStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
 
 DO $$
+DECLARE
+  enum_exists BOOLEAN;
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_type
-    WHERE typname = 'AdminRole'
-  ) THEN
-    CREATE TYPE "AdminRole" AS ENUM ('CFO', 'SUPER', 'ANALYST', 'MANAGER', 'FINANCE');
+  SELECT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'AdminRole'
+  ) INTO enum_exists;
+
+  IF NOT enum_exists THEN
+    EXECUTE $$CREATE TYPE "AdminRole" AS ENUM ('CFO', 'SUPER', 'ANALYST', 'MANAGER', 'FINANCE')$$;
   END IF;
 END $$;
 
 DO $$
+DECLARE
+  missing_manager BOOLEAN;
+  missing_finance BOOLEAN;
 BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_type
-    WHERE typname = 'AdminRole'
-  ) THEN
-    IF NOT EXISTS (
-      SELECT 1
-      FROM pg_enum e
-      JOIN pg_type t ON e.enumtypid = t.oid
-      WHERE t.typname = 'AdminRole'
-        AND e.enumlabel = 'MANAGER'
-    ) THEN
-      ALTER TYPE "AdminRole" ADD VALUE 'MANAGER';
-    END IF;
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM pg_enum e
+    JOIN pg_type t ON e.enumtypid = t.oid
+    WHERE t.typname = 'AdminRole'
+      AND e.enumlabel = 'MANAGER'
+  ) INTO missing_manager;
 
-    IF NOT EXISTS (
-      SELECT 1
-      FROM pg_enum e
-      JOIN pg_type t ON e.enumtypid = t.oid
-      WHERE t.typname = 'AdminRole'
-        AND e.enumlabel = 'FINANCE'
-    ) THEN
-      ALTER TYPE "AdminRole" ADD VALUE 'FINANCE';
-    END IF;
+  IF missing_manager THEN
+    EXECUTE $$ALTER TYPE "AdminRole" ADD VALUE 'MANAGER'$$;
+  END IF;
+
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM pg_enum e
+    JOIN pg_type t ON e.enumtypid = t.oid
+    WHERE t.typname = 'AdminRole'
+      AND e.enumlabel = 'FINANCE'
+  ) INTO missing_finance;
+
+  IF missing_finance THEN
+    EXECUTE $$ALTER TYPE "AdminRole" ADD VALUE 'FINANCE'$$;
   END IF;
 END $$;
 

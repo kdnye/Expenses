@@ -31,11 +31,32 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 1
 fi
 
-# Apply migrations once the database is ready.
-until npx prisma migrate deploy; do
-  echo "[entrypoint] Waiting for Postgres to become ready..."
-  sleep 3
+# Apply migrations once the database is ready. Treat connectivity issues as retryable
+# but surface real migration failures immediately so the container does not loop forever
+# on an unrecoverable error.
+PRISMA_OUTPUT="$(mktemp)"
+trap 'rm -f "$PRISMA_OUTPUT"' EXIT
+
+while true; do
+  if npx prisma migrate deploy >"$PRISMA_OUTPUT" 2>&1; then
+    cat "$PRISMA_OUTPUT"
+    break
+  fi
+
+  if grep -Eq 'P1001|ECONNREFUSED|Timed out|database server was not found' "$PRISMA_OUTPUT"; then
+    cat "$PRISMA_OUTPUT" >&2
+    echo "[entrypoint] Waiting for Postgres to become ready..."
+    sleep 3
+    continue
+  fi
+
+  cat "$PRISMA_OUTPUT" >&2
+  echo "[entrypoint] Prisma migrate failed with a non-recoverable error. Exiting." >&2
+  exit 1
 done
+
+trap - EXIT
+rm -f "$PRISMA_OUTPUT"
 
 if [ "$#" -eq 0 ]; then
   echo "[entrypoint] Starting the API in watch mode"
