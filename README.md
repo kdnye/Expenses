@@ -17,6 +17,16 @@ For a full operational handbook—including architecture notes, onboarding check
 
 ## Getting started
 
+### Frontend test prerequisites
+
+Whether you are working locally or inside the provided Codespaces devcontainer, install the Node dependencies before running any frontend-focused checks:
+
+```bash
+npm install
+```
+
+The devcontainer intentionally skips automatic installation, so run this command manually prior to executing tasks such as `npm test` or `npm run lint`.
+
 ### Run the full stack with Docker Compose
 
 1. Create a `.env` file in the repository root that at minimum defines the administrator session secret:

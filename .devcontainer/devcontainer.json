@@ -5,7 +5,7 @@
   "workspaceFolder": "/workspace",
   "shutdownAction": "stopCompose",
   "forwardPorts": [3000, 5432],
-  "postCreateCommand": "npm install",
+  "postCreateCommand": "echo 'Run npm install manually before executing frontend tests.'",
   "customizations": {
     "vscode": {
       "settings": {
