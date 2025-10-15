@@ -11,6 +11,7 @@ const sampleState = {
     dates: 'May 1-7 2024',
     tripLength: 6,
     email: ' jamie.freight@example.com ',
+    managerEmail: 'manager@example.com',
   },
   expenses: [
     {

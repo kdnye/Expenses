@@ -1,53 +1,72 @@
 import { Router } from 'express';
-import { ApprovalStage, ApprovalStatus, AdminRole, Prisma, ReportStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAdmin, adminApprovalRoles } from '../middleware/adminAuth.js';
+import {
+  ApprovalStageEnum,
+  ApprovalStatusEnum,
+  AdminRoleEnum,
+  ReportStatusEnum,
+  type ApprovalStageLiteral,
+  type AdminRoleLiteral,
+  type ApprovalStatusLiteral,
+} from '../lib/prismaEnums.js';
 
 const router = Router();
 
 const approvalQuerySchema = z
   .object({
-    stage: z.nativeEnum(ApprovalStage),
-    status: z.enum(['pending', 'approved', 'rejected']).default('pending')
+    stage: z.nativeEnum(ApprovalStageEnum),
+    status: z.enum(['pending', 'approved', 'rejected']).default('pending'),
   })
   .transform((value) => ({
     stage: value.stage,
-    status: value.status
+    status: value.status,
   }));
 
 const decisionSchema = z.object({
-  stage: z.nativeEnum(ApprovalStage),
+  stage: z.nativeEnum(ApprovalStageEnum),
   action: z.enum(['approve', 'reject']),
   note: z
     .string()
     .trim()
     .max(1000, 'Notes must be 1,000 characters or fewer.')
-    .optional()
+    .optional(),
 });
 
-const stageRoleMap: Record<ApprovalStage, AdminRole[]> = {
-  [ApprovalStage.MANAGER]: ['MANAGER', 'ANALYST', 'CFO', 'SUPER'],
-  [ApprovalStage.FINANCE]: ['CFO', 'SUPER', 'FINANCE']
+const stageRoleMap: Record<ApprovalStageLiteral, AdminRoleLiteral[]> = {
+  [ApprovalStageEnum.MANAGER]: [
+    AdminRoleEnum.MANAGER,
+    AdminRoleEnum.ANALYST,
+    AdminRoleEnum.CFO,
+    AdminRoleEnum.SUPER,
+  ],
+  [ApprovalStageEnum.FINANCE]: [AdminRoleEnum.CFO, AdminRoleEnum.SUPER, AdminRoleEnum.FINANCE],
 };
 
-function canActOnStage(role: AdminRole, stage: ApprovalStage): boolean {
+function canActOnStage(role: AdminRoleLiteral, stage: ApprovalStageLiteral): boolean {
   const roles = stageRoleMap[stage] ?? [];
   return roles.includes(role);
 }
 
-function serializeApproval(approval: { status: ApprovalStatus; decidedBy: string | null; decidedAt: Date | null; note: string | null }) {
+function serializeApproval(approval: {
+  status: ApprovalStatusLiteral;
+  decidedBy: string | null;
+  decidedAt: Date | null;
+  note: string | null;
+}) {
   return {
     status: approval.status,
     decidedBy: approval.decidedBy,
     decidedAt: approval.decidedAt ? approval.decidedAt.toISOString() : null,
-    note: approval.note
+    note: approval.note,
   };
 }
 
 function serializeReport(report: Prisma.ReportGetPayload<{ include: { approvals: true; expenses: true } }>) {
-  const managerApproval = report.approvals.find((approval) => approval.stage === ApprovalStage.MANAGER) ?? null;
-  const financeApproval = report.approvals.find((approval) => approval.stage === ApprovalStage.FINANCE) ?? null;
+  const managerApproval = report.approvals.find((approval) => approval.stage === ApprovalStageEnum.MANAGER) ?? null;
+  const financeApproval = report.approvals.find((approval) => approval.stage === ApprovalStageEnum.FINANCE) ?? null;
 
   return {
     reportId: report.reportId,
@@ -59,9 +78,10 @@ function serializeReport(report: Prisma.ReportGetPayload<{ include: { approvals:
     totals: report.totals,
     approvals: {
       manager: managerApproval ? serializeApproval(managerApproval) : null,
-      finance: financeApproval ? serializeApproval(financeApproval) : null
+      finance: financeApproval ? serializeApproval(financeApproval) : null,
     },
     expenses: report.expenses
+      .slice()
       .sort((a, b) => {
         const aTime = a.incurredAt ? a.incurredAt.getTime() : 0;
         const bTime = b.incurredAt ? b.incurredAt.getTime() : 0;
@@ -73,13 +93,13 @@ function serializeReport(report: Prisma.ReportGetPayload<{ include: { approvals:
         description: expense.description,
         amount: expense.amount.toString(),
         currency: expense.currency,
-        incurredAt: expense.incurredAt ? expense.incurredAt.toISOString() : null
-      }))
+        incurredAt: expense.incurredAt ? expense.incurredAt.toISOString() : null,
+      })),
   };
 }
 
 router.get('/', requireAdmin(adminApprovalRoles), async (req, res, next) => {
-  let parsed: { stage: ApprovalStage; status: 'pending' | 'approved' | 'rejected' };
+  let parsed: { stage: ApprovalStageLiteral; status: 'pending' | 'approved' | 'rejected' };
   try {
     parsed = approvalQuerySchema.parse(req.query);
   } catch (error) {
@@ -91,36 +111,36 @@ router.get('/', requireAdmin(adminApprovalRoles), async (req, res, next) => {
     return res.status(403).json({ message: 'Insufficient role for this stage.' });
   }
 
-  const statusMap: Record<typeof parsed.status, ApprovalStatus> = {
-    pending: ApprovalStatus.PENDING,
-    approved: ApprovalStatus.APPROVED,
-    rejected: ApprovalStatus.REJECTED
+  const statusMap: Record<typeof parsed.status, ApprovalStatusLiteral> = {
+    pending: ApprovalStatusEnum.PENDING,
+    approved: ApprovalStatusEnum.APPROVED,
+    rejected: ApprovalStatusEnum.REJECTED,
   };
 
   const where: Prisma.ReportWhereInput = {
     approvals: {
       some: {
         stage: parsed.stage,
-        status: statusMap[parsed.status]
-      }
-    }
+        status: statusMap[parsed.status],
+      },
+    },
   };
 
-  if (parsed.stage === ApprovalStage.MANAGER) {
+  if (parsed.stage === ApprovalStageEnum.MANAGER) {
     if (parsed.status === 'pending') {
-      where.status = ReportStatus.SUBMITTED;
+      where.status = ReportStatusEnum.SUBMITTED;
     } else if (parsed.status === 'approved') {
-      where.status = ReportStatus.MANAGER_APPROVED;
+      where.status = ReportStatusEnum.MANAGER_APPROVED;
     } else if (parsed.status === 'rejected') {
-      where.status = ReportStatus.REJECTED;
+      where.status = ReportStatusEnum.REJECTED;
     }
-  } else if (parsed.stage === ApprovalStage.FINANCE) {
+  } else if (parsed.stage === ApprovalStageEnum.FINANCE) {
     if (parsed.status === 'pending') {
-      where.status = ReportStatus.MANAGER_APPROVED;
+      where.status = ReportStatusEnum.MANAGER_APPROVED;
     } else if (parsed.status === 'approved') {
-      where.status = ReportStatus.FINANCE_APPROVED;
+      where.status = ReportStatusEnum.FINANCE_APPROVED;
     } else if (parsed.status === 'rejected') {
-      where.status = ReportStatus.REJECTED;
+      where.status = ReportStatusEnum.REJECTED;
     }
   }
 
@@ -130,10 +150,10 @@ router.get('/', requireAdmin(adminApprovalRoles), async (req, res, next) => {
       include: {
         approvals: true,
         expenses: {
-          orderBy: { incurredAt: 'asc' }
-        }
+          orderBy: { incurredAt: 'asc' },
+        },
       },
-      orderBy: { finalizedAt: 'asc' }
+      orderBy: { finalizedAt: 'asc' },
     });
 
     return res.json({ reports: reports.map(serializeReport) });
@@ -168,84 +188,88 @@ router.post('/:reportId/decision', requireAdmin(adminApprovalRoles), async (req,
         where: {
           reportId_stage: {
             reportId,
-            stage: parsed.data.stage
-          }
+            stage: parsed.data.stage,
+          },
         },
         include: {
           report: {
             include: {
               approvals: true,
               expenses: {
-                orderBy: { incurredAt: 'asc' }
-              }
-            }
-          }
-        }
+                orderBy: { incurredAt: 'asc' },
+              },
+            },
+          },
+        },
       });
 
       if (!approval || !approval.report) {
         return null;
       }
 
-      if (approval.status !== ApprovalStatus.PENDING) {
+      if (approval.status !== ApprovalStatusEnum.PENDING) {
         throw Object.assign(new Error('Approval already decided.'), { statusCode: 409 });
       }
 
-      if (parsed.data.stage === ApprovalStage.FINANCE) {
-        const managerApproval = approval.report.approvals.find((item) => item.stage === ApprovalStage.MANAGER);
-        if (!managerApproval || managerApproval.status !== ApprovalStatus.APPROVED) {
+      if (parsed.data.stage === ApprovalStageEnum.FINANCE) {
+        const managerApproval = approval.report.approvals.find(
+          (item) => item.stage === ApprovalStageEnum.MANAGER,
+        );
+        if (!managerApproval || managerApproval.status !== ApprovalStatusEnum.APPROVED) {
           throw Object.assign(new Error('Manager approval required before finance review.'), { statusCode: 409 });
         }
       }
 
       const nextApprovalStatus =
-        parsed.data.action === 'approve' ? ApprovalStatus.APPROVED : ApprovalStatus.REJECTED;
+        parsed.data.action === 'approve' ? ApprovalStatusEnum.APPROVED : ApprovalStatusEnum.REJECTED;
       const nextReportStatus = (() => {
         if (parsed.data.action !== 'approve') {
-          return ReportStatus.REJECTED;
+          return ReportStatusEnum.REJECTED;
         }
-        return parsed.data.stage === ApprovalStage.MANAGER
-          ? ReportStatus.MANAGER_APPROVED
-          : ReportStatus.FINANCE_APPROVED;
+        return parsed.data.stage === ApprovalStageEnum.MANAGER
+          ? ReportStatusEnum.MANAGER_APPROVED
+          : ReportStatusEnum.FINANCE_APPROVED;
       })();
 
       await tx.reportApproval.update({
         where: {
           reportId_stage: {
             reportId,
-            stage: parsed.data.stage
-          }
+            stage: parsed.data.stage,
+          },
         },
         data: {
           status: nextApprovalStatus,
           decidedBy: user.username,
           decidedAt: new Date(),
-          note: note ?? null
-        }
+          note: note ?? null,
+        },
       });
 
-      if (parsed.data.stage === ApprovalStage.MANAGER) {
-        await tx.reportApproval.update({
-          where: {
-            reportId_stage: {
-              reportId,
-              stage: ApprovalStage.FINANCE
-            }
-          },
-          data: {
-            status: ApprovalStatus.PENDING,
-            decidedAt: null,
-            decidedBy: null,
-            note: null
-          }
-        }).catch(() => Promise.resolve(null));
+      if (parsed.data.stage === ApprovalStageEnum.MANAGER) {
+        await tx.reportApproval
+          .update({
+            where: {
+              reportId_stage: {
+                reportId,
+                stage: ApprovalStageEnum.FINANCE,
+              },
+            },
+            data: {
+              status: ApprovalStatusEnum.PENDING,
+              decidedAt: null,
+              decidedBy: null,
+              note: null,
+            },
+          })
+          .catch(() => Promise.resolve(null));
       }
 
       await tx.report.update({
         where: { reportId },
         data: {
-          status: nextReportStatus
-        }
+          status: nextReportStatus,
+        },
       });
 
       const refreshed = await tx.report.findUnique({
@@ -253,9 +277,9 @@ router.post('/:reportId/decision', requireAdmin(adminApprovalRoles), async (req,
         include: {
           approvals: true,
           expenses: {
-            orderBy: { incurredAt: 'asc' }
-          }
-        }
+            orderBy: { incurredAt: 'asc' },
+          },
+        },
       });
 
       return refreshed;

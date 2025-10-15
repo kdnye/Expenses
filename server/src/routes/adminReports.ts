@@ -1,10 +1,14 @@
 import { Router } from 'express';
 import archiver from 'archiver';
 import { z } from 'zod';
-import { ApprovalStage, ReportStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { getReceiptStorage } from '../lib/receiptStorage.js';
 import { requireAdmin, adminFinanceRoles } from '../middleware/adminAuth.js';
+import {
+  ApprovalStageEnum,
+  ReportStatusEnum,
+  type ApprovalStageLiteral,
+} from '../lib/prismaEnums.js';
 
 const router = Router();
 
@@ -77,7 +81,7 @@ router.get('/', requireAdmin(adminFinanceRoles), async (req, res, next) => {
           gte: parsed.start,
           lte: parsed.end
         },
-        status: ReportStatus.FINANCE_APPROVED,
+        status: ReportStatusEnum.FINANCE_APPROVED,
         ...(parsed.employees
           ? {
               employeeEmail: {
@@ -169,12 +173,12 @@ router.get('/', requireAdmin(adminFinanceRoles), async (req, res, next) => {
       ].join(',')
     ];
 
-    const approvalByStage = (stage: ApprovalStage, report: typeof reports[number]) =>
+    const approvalByStage = (stage: ApprovalStageLiteral, report: typeof reports[number]) =>
       report.approvals.find((approval) => approval.stage === stage);
 
     for (const report of reports) {
-      const managerApproval = approvalByStage(ApprovalStage.MANAGER, report);
-      const financeApproval = approvalByStage(ApprovalStage.FINANCE, report);
+      const managerApproval = approvalByStage(ApprovalStageEnum.MANAGER, report);
+      const financeApproval = approvalByStage(ApprovalStageEnum.FINANCE, report);
 
       reportLines.push(
         [

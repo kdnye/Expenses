@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { ApprovalStage, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { reportSchema } from '../validators/reportSchema.js';
+import { ApprovalStageEnum } from '../lib/prismaEnums.js';
 
 const router = Router();
 
@@ -66,8 +67,8 @@ router.post('/', authenticate, async (req, res, next) => {
       await tx.expense.createMany({ data: expensesData });
       await tx.reportApproval.createMany({
         data: [
-          { reportId: data.reportId, stage: ApprovalStage.MANAGER },
-          { reportId: data.reportId, stage: ApprovalStage.FINANCE }
+          { reportId: data.reportId, stage: ApprovalStageEnum.MANAGER },
+          { reportId: data.reportId, stage: ApprovalStageEnum.FINANCE }
         ]
       });
 
@@ -114,9 +115,11 @@ router.post('/', authenticate, async (req, res, next) => {
       expenseCount: expensesData.length
     });
   } catch (error) {
+    const KnownRequestError = Prisma?.PrismaClientKnownRequestError;
     if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
+      typeof KnownRequestError === 'function' &&
+      error instanceof KnownRequestError &&
+      (error as Prisma.PrismaClientKnownRequestError).code === 'P2002'
     ) {
       return res.status(409).json({
         message: 'Report already exists',

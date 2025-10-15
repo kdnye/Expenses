@@ -339,6 +339,12 @@
         <label style="grid-column: 1 / -1;">Employee emails (optional)
           <textarea id="employeeFilter" rows="3" placeholder="one-per-line or comma separated"></textarea>
         </label>
+        <label class="inline">Export format
+          <select id="exportFormat">
+            <option value="zip" selected>Detailed ZIP (CSV)</option>
+            <option value="journal">NetSuite journal JSON</option>
+          </select>
+        </label>
         <div class="actions" style="grid-column: 1 / -1;">
           <button type="submit" id="downloadBtn">Download reports</button>
           <button type="button" id="logoutBtn" class="secondary">Sign out</button>

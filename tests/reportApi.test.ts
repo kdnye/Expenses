@@ -7,6 +7,7 @@ const receiptFindMany = vi.fn();
 const expenseFindMany = vi.fn();
 const receiptUpdate = vi.fn();
 const transactionMock = vi.fn();
+const reportApprovalCreateMany = vi.fn();
 
 vi.mock('../server/src/lib/prisma.js', () => ({
   prisma: {
@@ -27,12 +28,14 @@ describe('report submission', () => {
     receiptFindMany.mockReset();
     expenseFindMany.mockReset();
     receiptUpdate.mockReset();
+    reportApprovalCreateMany.mockReset();
 
     transactionMock.mockImplementation(async (callback) => {
       return callback({
         report: { create: reportCreate },
         expense: { createMany: expenseCreateMany, findMany: expenseFindMany },
         receipt: { findMany: receiptFindMany, update: receiptUpdate },
+        reportApproval: { createMany: reportApprovalCreateMany },
       });
     });
   });
@@ -56,7 +59,7 @@ describe('report submission', () => {
       reportId: 'rep-1',
       employeeEmail: 'user@example.com',
       finalizedAt: new Date('2024-03-05T00:00:00Z').toISOString(),
-      header: { name: 'User Example' },
+      header: { name: 'User Example', managerEmail: 'manager@example.com' },
       totals: { submitted: 10 },
       period: { year: 2024, month: 3, week: 10 },
       expenses: [

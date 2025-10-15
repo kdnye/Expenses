@@ -1,12 +1,13 @@
-# FSI Expense Report Builder
+# FSI Expense Submission Portal
 
-A lightweight web application for preparing Freight Services expense reports with built-in policy validation.
+A full-stack web application for capturing, approving, and exporting Freight Services employee expenses with built-in policy safeguards.
 
 ## Features
-- Persist report header details and expense rows locally.
-- Inline policy reminders for travel, meals, and mileage reimbursements.
-- Automatic reimbursement calculations for capped categories and mileage at the IRS rate.
-- Copy-ready text preview that mirrors the official expense form layout.
+- Employees enter expenses in the browser and submit them directly to the API for long-term storage.
+- Submissions are automatically flagged for manager and finance review with a two-stage approval workflow.
+- Inline policy reminders for travel, meals, and mileage reimbursements with automatic mileage calculations at the IRS rate.
+- Managers review incoming reports, record decisions, and unblock finance approvals through the shared admin console.
+- Finance analysts can download detailed ZIP exports **or** NetSuite-ready journal summaries for a chosen date window.
 - Offline-ready experience once the site has been loaded at least once while online.
 - Attach receipts (images or PDFs) to individual expenses and track upload status before submitting.
 
