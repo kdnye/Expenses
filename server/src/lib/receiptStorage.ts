@@ -202,13 +202,13 @@ async function createGoogleDriveStorage(): Promise<ReceiptStorage> {
   const credentialsJson = process.env.GDRIVE_CREDENTIALS_JSON;
   const credentials = credentialsJson ? normalizeDriveCredentials(credentialsJson) : undefined;
 
-  const { google } = await import('@googleapis/drive');
-  const auth = new google.auth.GoogleAuth({
+  const driveModule = await import('@googleapis/drive');
+  const auth = new driveModule.auth.GoogleAuth({
     scopes,
     ...(credentials ? { credentials } : {}),
   });
 
-  const drive = google.drive({ version: 'v3', auth });
+  const drive = driveModule.drive({ version: 'v3', auth });
 
   return {
     async upload(options: UploadReceiptOptions) {

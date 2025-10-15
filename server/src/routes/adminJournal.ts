@@ -46,17 +46,29 @@ const querySchema = z
 
 const ZERO = new Decimal(0);
 
-type DecimalLike = Decimal | number | string | bigint | { toString(): string };
+type DecimalConvertible = Decimal | number | string | bigint | { toString(): string };
 
-function toDecimal(value: DecimalLike): Decimal {
+function toDecimal(value: DecimalConvertible): Decimal {
   if (value instanceof Decimal) {
     return value;
   }
 
-  return new Decimal(value);
+  if (typeof value === 'number' || typeof value === 'string') {
+    return new Decimal(value);
+  }
+
+  if (typeof value === 'bigint') {
+    return new Decimal(value.toString());
+  }
+
+  if (value && typeof value === 'object' && typeof value.toString === 'function') {
+    return new Decimal(value.toString());
+  }
+
+  throw new TypeError('Unsupported decimal input');
 }
 
-function addDecimal(a: Decimal, b: DecimalLike): Decimal {
+function addDecimal(a: Decimal, b: DecimalConvertible): Decimal {
   return a.add(toDecimal(b));
 }
 
