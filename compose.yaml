@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-expenses}
+      POSTGRES_USER: ${POSTGRES_USER:-expenses}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-expenses}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-expenses} -d ${POSTGRES_DB:-expenses}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  api:
+    image: node:20-bookworm
+    init: true
+    working_dir: /workspace/server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      API_KEY: ${API_KEY:-local-dev-api-key}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-dev-admin-secret}
+      DATABASE_URL: "${DATABASE_URL:-postgresql://${POSTGRES_USER:-expenses}:${POSTGRES_PASSWORD:-expenses}@postgres:5432/${POSTGRES_DB:-expenses}?schema=public}"
+      NODE_ENV: development
+      PORT: 3000
+      POSTGRES_DB: ${POSTGRES_DB:-expenses}
+      POSTGRES_USER: ${POSTGRES_USER:-expenses}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-expenses}
+      CHOKIDAR_USEPOLLING: "1"
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/workspace:cached
+      - api-node-modules:/workspace/server/node_modules
+    entrypoint: ["/workspace/docker/dev-entrypoint.sh"]
+
+volumes:
+  postgres-data:
+  api-node-modules:
