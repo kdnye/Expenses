@@ -19,17 +19,14 @@ For a full operational handbook—including architecture notes, onboarding check
 
 ### Run the full stack with Docker Compose
 
-1. Create a `.env` file in the repository root that at minimum defines the API secrets:
+#### Development / Codespaces (`compose.yaml`)
+
+1. (Optional) Create a `.env` file in the repository root to override the defaults. Without one the stack boots with `API_KEY=local-dev-api-key`, `ADMIN_JWT_SECRET=dev-admin-secret`, and a PostgreSQL database named `expenses`.
+2. Start the stack:
    ```bash
-   API_KEY="local-dev-api-key"
-   ADMIN_JWT_SECRET="replace-with-a-long-random-string"
+   docker compose up
    ```
-   You can also override the default Postgres credentials exposed by `docker-compose.yml` by setting `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` in the same file. The Compose configuration injects everything into the API container and derives `DATABASE_URL` automatically.
-2. Build and start the stack:
-   ```bash
-   docker compose up --build
-   ```
-   The API waits for Postgres to become healthy, executes `npx prisma migrate deploy` to apply pending migrations, and then launches `node dist/index.js`.
+   The development compose file mounts the repository into the container, installs dependencies on first boot, generates the Prisma client, waits for Postgres, applies migrations, and then launches `npm run dev` with file watching enabled. Restart the service to pick up dependency changes.
 3. Visit [http://localhost:3000](http://localhost:3000) to access the combined API and single-page application. The Postgres container publishes port `5432` so tools like `psql` can connect for inspection or local debugging.
 
 To create new Prisma migrations during development, run:
@@ -38,7 +35,17 @@ To create new Prisma migrations during development, run:
 docker compose run --rm api npx prisma migrate dev --name <migration-name>
 ```
 
-After editing the schema and generating a migration, commit the new files in `server/prisma/migrations/` so they are deployed in other environments.
+The command uses the mounted workspace, so any generated migration files appear directly in `server/prisma/migrations/`.
+
+#### Production-style image (`docker-compose.yml`)
+
+The repository also includes a production-focused compose file that builds the multi-stage API image. Follow the same `.env` guidance above and then start the services with:
+
+```bash
+docker compose -f docker-compose.yml up --build
+```
+
+This variant runs the compiled server (`node dist/index.js`) inside the container instead of the watch mode used for local development.
 
 ### Frontend-only preview
 
