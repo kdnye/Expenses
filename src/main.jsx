@@ -1,5 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
 import App from './App.jsx';
 import '../styles.css';
 
@@ -8,9 +9,10 @@ const root = createRoot(container);
 root.render(<App />);
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker
-    .register('/service-worker.js')
-    .catch((error) => {
+  registerSW({
+    immediate: true,
+    onRegisterError(error) {
       console.error('Service worker registration failed:', error);
-    });
+    },
+  });
 }

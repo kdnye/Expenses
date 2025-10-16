@@ -171,9 +171,7 @@ const ExpenseRow = ({ expense, onChange, onRemove, onReceiptFiles, receiptStatus
           value={
             showMileageDetails
               ? expense.amount ?? ''
-              : expense.amount && expense.amount !== 0
-                ? expense.amount
-                : ''
+              : expense.amount || ''
           }
           onChange={handleAmountChange}
           className={`exp-amount${showMileageDetails ? ' readonly' : ''}`}
