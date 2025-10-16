@@ -15,6 +15,13 @@ A full-stack web application for capturing, approving, and exporting Freight Ser
 
 For a full operational handbook—including architecture notes, onboarding checklists, and the official Freight Services expense reimbursement policy—see [`docs/OPERATIONS_GUIDE.md`](docs/OPERATIONS_GUIDE.md).
 
+## Containerization status
+
+Container orchestration now lives in the internal infrastructure repository. During the October 15, 2025 refactor we cleared
+the local Docker assets (`compose.yaml`, `docker-compose.yml`, and `Dockerfile`) so this application repository focuses on the
+TypeScript/Node codebase. The empty files remain only as placeholders for tooling that expects them. See
+[`docs/containerization-status.md`](docs/containerization-status.md) for the timeline and migration guidance.
+
 ## Getting started
 
 ### Frontend test prerequisites
@@ -45,42 +52,6 @@ Key variables include:
 | `S3_*` / `GCS_*` / `GDRIVE_*` | Provider-specific settings for receipt storage integrations. |
 
 The defaults in `.env.example` keep uploads in memory. Switch to S3, Google Cloud Storage, or Google Drive by updating `RECEIPT_STORAGE_PROVIDER` and filling in the corresponding section of the file. Invalid or missing combinations are detected at startup so misconfiguration is caught early.
-
-### Run the full stack with Docker Compose
-
-1. Create a `.env` file in the repository root that at minimum defines the administrator session secret:
-   ```bash
-   ADMIN_JWT_SECRET="replace-with-a-long-random-string"
-   ```
-   You can also override the default Postgres credentials exposed by `docker-compose.yml` by setting `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` in the same file. The Compose configuration injects everything into the API container and derives `DATABASE_URL` automatically.
-2. Build and start the stack:
-#### Development / Codespaces (`compose.yaml`)
-
-1. (Optional) Create a `.env` file in the repository root to override the defaults. Without one the stack boots with `API_KEY=local-dev-api-key`, `ADMIN_JWT_SECRET=dev-admin-secret`, and a PostgreSQL database named `expenses`.
-2. Start the stack:
-   ```bash
-   docker compose up
-   ```
-   The development compose file mounts the repository into the container, installs dependencies on first boot, generates the Prisma client, waits for Postgres, applies migrations, and then launches `npm run dev` with file watching enabled. Restart the service to pick up dependency changes.
-3. Visit [http://localhost:3000](http://localhost:3000) to access the combined API and single-page application. The Postgres container publishes port `5432` so tools like `psql` can connect for inspection or local debugging.
-
-To create new Prisma migrations during development, run:
-
-```bash
-docker compose run --rm api npx prisma migrate dev --name <migration-name>
-```
-
-The command uses the mounted workspace, so any generated migration files appear directly in `server/prisma/migrations/`.
-
-#### Production-style image (`docker-compose.yml`)
-
-The repository also includes a production-focused compose file that builds the multi-stage API image. Follow the same `.env` guidance above and then start the services with:
-
-```bash
-docker compose -f docker-compose.yml up --build
-```
-
-This variant runs the compiled server (`node dist/index.js`) inside the container instead of the watch mode used for local development.
 
 ### Local PostgreSQL installation
 
@@ -120,57 +91,11 @@ When the API is hosted on a different domain or behind a reverse proxy prefix, p
 
 Relative values such as `/internal/expenses-api` are also supported. If no configuration is supplied the app continues to use same-origin requests.
 
-## Container image
+## Deployment overview
 
-The application can be packaged as a lightweight NGINX container by using the included `Dockerfile`. The container listens on the `PORT` environment variable (default `8080`), making it compatible with platforms like Google Cloud Run.
-
-Build and run locally:
-
-```bash
-docker build -t expenses-web:local .
-docker run --rm -p 8080:8080 expenses-web:local
-```
-
-The site will be served at http://localhost:8080.
-
-## Cloud Run static hosting
-
-### Manual deployment
-
-Use the following sequence to build, push, and deploy the static frontend to Google Cloud Run. Replace the sample identifiers with values from your project:
-
-```bash
-export PROJECT_ID="my-expenses-project"
-export REGION="us-east4"
-export GAR_LOCATION="us-east4"
-export REPOSITORY="expenses"
-export SERVICE="expenses"
-export IMAGE_NAME="expenses-frontend"
-export IMAGE_TAG="$(git rev-parse --short HEAD)"
-export IMAGE_URI="${GAR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}"
-
-docker build -t "$IMAGE_URI" .
-docker push "$IMAGE_URI"
-
-gcloud run deploy "$SERVICE" \
-  --project "$PROJECT_ID" \
-  --region "$REGION" \
-  --image "$IMAGE_URI" \
-  --allow-unauthenticated \
-  --platform managed
-```
-
-If you manage Cloud Run through a declarative YAML file, update the `spec.template.spec.containers[0].image` field with `IMAGE_URI` before calling `gcloud run services replace`.
-
-### GitHub Actions workflow
-
-The repository includes a workflow (`.github/workflows/cloud-run-frontend.yml`) that mirrors the manual steps above. On each push to `main`, the workflow:
-
-1. Authenticates to Google Cloud via Workload Identity Federation.
-2. Builds the frontend container with the commit SHA as the tag and pushes it to Artifact Registry.
-3. Deploys the image to the configured Cloud Run service and promotes the revision to 100% traffic.
-
-Configure the project-specific values described in the [GitHub configuration](#github-configuration) section to enable the pipeline.
+Container builds, runtime images, and deployment automation are now maintained in the infrastructure repository. Use the
+playbooks linked from [`docs/containerization-status.md`](docs/containerization-status.md) to provision environments. The
+application repository focuses on source code, database migrations, and Kubernetes manifests.
 
 ## Kubernetes database configuration
 
