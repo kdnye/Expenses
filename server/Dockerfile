@@ -14,6 +14,19 @@ COPY server/src ./src
 COPY --from=deps /app/node_modules ./node_modules
 RUN npm run build
 
+FROM node:20-bookworm-slim AS frontend
+WORKDIR /frontend
+COPY package.json package-lock.json ./
+COPY server/package.json server/package-lock.json ./server/
+RUN npm ci
+COPY index.html ./
+COPY admin.html ./
+COPY vite.config.js ./
+COPY styles.css ./
+COPY public ./public
+COPY src ./src
+RUN npm run build
+
 FROM node:20-bookworm-slim AS prod-deps
 WORKDIR /app
 COPY server/package.json server/package-lock.json ./
@@ -28,15 +41,7 @@ COPY server/package.json server/package-lock.json ./
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY server/prisma ./prisma
-COPY public ./public
-COPY index.html ./public/index.html
-COPY styles.css ./public/styles.css
-COPY manifest.webmanifest ./public/manifest.webmanifest
-COPY service-worker.js ./public/service-worker.js
-COPY fsi-logo.png ./public/fsi-logo.png
-COPY admin.html ./admin.html
-COPY src ./src
-COPY src ./public/src
+COPY --from=frontend /frontend/dist ./public
 
 RUN chown -R node:node /app
 USER node

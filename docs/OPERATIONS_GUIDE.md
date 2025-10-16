@@ -101,15 +101,15 @@ The GitHub Actions workflow `.github/workflows/cloud-run-frontend.yml` automates
 
 - **State management**: `src/storage.js` persists a normalized report state keyed by `STORAGE_KEY`. Fresh sessions derive from `constants.DEFAULT_STATE`.
 - **Expense metadata**: `src/constants.js` defines supported expense types, account codes, and policy hints (meal, travel, mileage). UI controls hydrate from this source of truth to remain consistent with finance expectations.
-- **Policy enforcement**: `src/main.js` calculates totals, enforces receipt attachments, checks meal caps, and tracks mileage reimbursements at the IRS rate (`IRS_RATE`). Policy copy is displayed to users via `policy` descriptors attached to each expense type.
+- **Policy enforcement**: `src/logic/expenses.js` and the React components orchestrated by `src/App.jsx` calculate totals, enforce receipt attachments, check meal caps, and track mileage reimbursements at the IRS rate (`IRS_RATE`). Policy copy is displayed to users via `policy` descriptors attached to each expense type.
 - **Report payload assembly**: `src/reportPayload.js` transforms the interactive state into the immutable structure expected by the API, including totals and computed reimbursement amounts. Totals can be imported directly into accounting systems.
 - **Utilities**: `src/utils.js` contains formatting helpers (currency, UUID generation, numeric parsing) to keep the UI code focused on behavior.
 
 ### Key UI flows
 
-1. **Add expense line** → `createExpenseRow` in `src/main.js` generates DOM nodes, binds input listeners, and keeps the DOM synchronized with the canonical state map.
-2. **Receipt upload** → Files are staged locally, validated against type/size limits, and then streamed to `/api/receipts`. The API responds with metadata that is saved alongside the expense.
-3. **Finalization** → Submissions call `/api/reports` with the payload built by `buildReportPayload`. Successful responses purge local state and record the submission in `state.history`.
+1. **Add expense line** → `ExpensesTable` and `ExpenseRow` components render controlled inputs that feed into React state. Mutations flow through `handleAddExpense` and `handleExpenseChange` in `src/App.jsx`, which in turn rely on `evaluateExpense` from `src/logic/expenses.js`.
+2. **Receipt upload** → `uploadReceiptsForExpense` in `src/App.jsx` stages files locally, validates type/size limits, and streams them to `/api/receipts`. The API responds with metadata that is merged back into the expense entry.
+3. **Finalization** → `finalizeSubmit` prepares the payload via `buildReportPayload`, uploads any pending receipts, and submits to `/api/reports`. Successful responses purge local state and append a history entry for offline visibility.
 
 ## 5. Backend architecture
 

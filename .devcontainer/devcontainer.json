@@ -1,20 +1,19 @@
 {
-  "name": "FSI Expenses Dev",
-  "dockerComposeFile": ["../compose.yaml"],
-  "service": "api",
-  "workspaceFolder": "/workspace",
-  "shutdownAction": "stopCompose",
-  "forwardPorts": [3000, 5432],
-  "postCreateCommand": "echo 'Run npm install manually before executing frontend tests.'",
+  "name": "Expenses Dev Container",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "postCreateCommand": "npm install",
   "customizations": {
     "vscode": {
-      "settings": {
-        "editor.formatOnSave": true,
-        "files.exclude": {
-          "**/.idea": true,
-          "**/.DS_Store": true
-        }
-      }
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
     }
   }
 }

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import archiver from 'archiver';
 import { z } from 'zod';
+import { getConfig } from '../config.js';
 import { prisma } from '../lib/prisma.js';
 import { getReceiptStorage } from '../lib/receiptStorage.js';
 import { requireAdmin, adminFinanceRoles } from '../middleware/adminAuth.js';
@@ -12,6 +13,12 @@ import {
 } from '../lib/prismaEnums.js';
 
 const router = Router();
+
+const {
+  receipts: {
+    limits: { signedUrlTtlSeconds: RECEIPT_SIGNED_URL_TTL_SECONDS },
+  },
+} = getConfig();
 
 const querySchema = z
   .object({
@@ -226,7 +233,7 @@ router.get('/', requireAdmin(adminFinanceRoles), async (req, res, next) => {
             storageKey: receipt.storageKey,
             storageUrl: receipt.storageUrl,
           },
-          Number(process.env.RECEIPT_URL_TTL_SECONDS ?? 900)
+          RECEIPT_SIGNED_URL_TTL_SECONDS
         );
 
         receiptLines.push(

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { createHash } from 'node:crypto';
+import { getConfig } from '../config.js';
 import { prisma } from '../lib/prisma.js';
 import {
   getReceiptStorage,
@@ -8,9 +9,11 @@ import {
   RECEIPT_ALLOWED_MIME_TYPES,
 } from '../lib/receiptStorage.js';
 
-const MAX_FILE_SIZE = Number(process.env.RECEIPT_MAX_BYTES ?? 10 * 1024 * 1024);
-const MAX_FILE_COUNT = Number(process.env.RECEIPT_MAX_FILES ?? 5);
-const SIGNED_URL_TTL_SECONDS = Number(process.env.RECEIPT_URL_TTL_SECONDS ?? 900);
+const {
+  receipts: {
+    limits: { maxBytes: MAX_FILE_SIZE, maxFiles: MAX_FILE_COUNT, signedUrlTtlSeconds: SIGNED_URL_TTL_SECONDS },
+  },
+} = getConfig();
 
 const upload = multer({
   storage: multer.memoryStorage(),

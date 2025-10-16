@@ -60,19 +60,25 @@ export const loadState = () => {
 };
 
 export const saveState = (state, { mode = 'draft' } = {}) => {
-  if (!storage) return;
-  if (!state.meta?.draftId) {
-    state.meta = { ...state.meta, draftId: uuid() };
-  }
+  if (!storage) return state;
 
-  state.meta.lastSavedMode = mode;
-  state.meta.lastSavedAt = new Date().toISOString();
+  const nextState = {
+    ...state,
+    meta: {
+      ...state.meta,
+      draftId: state.meta?.draftId || uuid(),
+      lastSavedMode: mode,
+      lastSavedAt: new Date().toISOString(),
+    },
+  };
 
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(state));
+    storage.setItem(STORAGE_KEY, JSON.stringify(nextState));
   } catch (error) {
     console.warn('Unable to persist expense state', error);
   }
+
+  return nextState;
 };
 
 export const clearDraft = () => {

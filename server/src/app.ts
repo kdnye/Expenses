@@ -23,8 +23,7 @@ app.use(express.json({ limit: '1mb' }));
 
 const rootDir = path.resolve(__dirname, '../../');
 const publicDir = path.join(rootDir, 'public');
-const adminHtmlPath = path.join(rootDir, 'admin.html');
-const adminScriptPath = path.join(rootDir, 'src', 'admin.js');
+const adminHtmlPath = path.join(publicDir, 'admin.html');
 
 if (fs.existsSync(publicDir)) {
   app.use(express.static(publicDir));
@@ -39,7 +38,7 @@ app.use('/api/admin/approvals', adminApprovalsRouter);
 
 const noCacheHeaders = {
   'Cache-Control': 'no-store',
-  Pragma: 'no-cache'
+  Pragma: 'no-cache',
 } as const;
 
 app.get('/admin', (req, res, next) => {
@@ -49,19 +48,6 @@ app.get('/admin', (req, res, next) => {
 
   res.set(noCacheHeaders);
   res.sendFile(adminHtmlPath, (err) => {
-    if (err) {
-      next(err);
-    }
-  });
-});
-
-app.get('/src/admin.js', (req, res, next) => {
-  if (!fs.existsSync(adminScriptPath)) {
-    return res.status(404).json({ message: 'Admin script not found' });
-  }
-
-  res.set(noCacheHeaders);
-  res.sendFile(adminScriptPath, (err) => {
     if (err) {
       next(err);
     }

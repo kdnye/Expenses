@@ -27,6 +27,25 @@ npm install
 
 The devcontainer intentionally skips automatic installation, so run this command manually prior to executing tasks such as `npm test` or `npm run lint`.
 
+### Environment configuration
+
+Configuration values for both the frontend build and the backend API are loaded centrally by `server/src/config.ts`. Copy `.env.example` to `.env` and adjust the values for your environment before starting any servers:
+
+```bash
+cp .env.example .env
+```
+
+Key variables include:
+
+| Variable | Purpose |
+| --- | --- |
+| `ADMIN_JWT_SECRET` | Required secret used to sign administrator session cookies. |
+| `RECEIPT_MAX_BYTES` / `RECEIPT_MAX_FILES` | Upper bounds enforced by the receipt upload endpoint. |
+| `RECEIPT_STORAGE_PROVIDER` | Storage backend (`memory`, `s3`, `gcs`, or `gdrive`). |
+| `S3_*` / `GCS_*` / `GDRIVE_*` | Provider-specific settings for receipt storage integrations. |
+
+The defaults in `.env.example` keep uploads in memory. Switch to S3, Google Cloud Storage, or Google Drive by updating `RECEIPT_STORAGE_PROVIDER` and filling in the corresponding section of the file. Invalid or missing combinations are detected at startup so misconfiguration is caught early.
+
 ### Run the full stack with Docker Compose
 
 1. Create a `.env` file in the repository root that at minimum defines the administrator session secret:
@@ -74,9 +93,12 @@ local instance.
 
 ### Frontend-only preview
 
-1. Serve the project with any static HTTP server (for example `python -m http.server 8000`).
-2. Open the site in your browser and start adding expenses.
-3. Copy the generated preview text into the company expense template when you are done.
+1. Launch the Vite development server:
+   ```bash
+   npm run dev
+   ```
+2. Open the printed local URL in your browser and start adding expenses.
+3. When you are ready to inspect the production build, run `npm run build` followed by `npm run preview` to serve the optimized assets.
 
 Local storage persistence is optional; if the browser disables access, the app still functions without saving state between sessions.
 
@@ -89,7 +111,7 @@ When the API is hosted on a different domain or behind a reverse proxy prefix, p
   ```html
   <meta name="fsi-expenses-api-base" content="https://expenses-api.example.com" />
   ```
-- Define a global configuration object before loading `src/main.js` or `src/admin.js`:
+- Define a global configuration object before loading the main bundle (or `src/admin.js` for the finance console):
   ```html
   <script>
     window.__FSI_EXPENSES_CONFIG__ = { apiBaseUrl: 'https://expenses-api.example.com' };

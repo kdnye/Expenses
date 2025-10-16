@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { AdminRole, AdminUser } from '@prisma/client';
 import jwt from 'jsonwebtoken';
+import { getConfig, requireAdminJwtSecret } from '../config.js';
 import { prisma } from '../lib/prisma.js';
 
 export type SessionUser = Pick<AdminUser, 'id' | 'username' | 'role'>;
@@ -25,23 +26,21 @@ interface JwtPayload {
 }
 
 function cookieOptions(withMaxAge: boolean) {
+  const {
+    environment: { isProduction },
+  } = getConfig();
+
   return {
     httpOnly: true,
     sameSite: 'strict' as const,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction,
     path: '/',
     ...(withMaxAge ? { maxAge: SESSION_MAX_AGE_MS } : {})
   };
 }
 
 function getJwtSecret(): string {
-  const secret = process.env.ADMIN_JWT_SECRET;
-
-  if (!secret) {
-    throw new Error('ADMIN_JWT_SECRET is not configured');
-  }
-
-  return secret;
+  return requireAdminJwtSecret();
 }
 
 function decodeToken(token: string): JwtPayload | undefined {

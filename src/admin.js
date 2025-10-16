@@ -1,4 +1,5 @@
 import { buildApiUrl } from './config.js';
+import '../styles.css';
 
 const loginForm = document.querySelector('#loginForm');
 const loginCard = document.querySelector('#loginCard');

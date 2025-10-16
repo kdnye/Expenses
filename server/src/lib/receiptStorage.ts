@@ -1,6 +1,7 @@
 import type { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
+import { getConfig, resetConfigCache } from '../config.js';
 
 export interface UploadReceiptOptions {
   reportId: string;
@@ -64,19 +65,16 @@ class MemoryReceiptStorage implements ReceiptStorage {
 }
 
 async function createS3Storage(): Promise<ReceiptStorage> {
-  const bucket = process.env.S3_BUCKET;
-  const region = process.env.S3_REGION ?? process.env.AWS_REGION;
-  if (!bucket) {
-    throw new Error('S3_BUCKET is required when using the s3 receipt storage provider.');
-  }
-  if (!region) {
-    throw new Error('S3_REGION (or AWS_REGION) is required when using the s3 receipt storage provider.');
+  const {
+    receipts: { storage },
+  } = getConfig();
+
+  const s3 = storage.s3;
+  if (!s3) {
+    throw new Error('S3 receipt storage is not configured. Ensure S3_BUCKET and S3_REGION are set.');
   }
 
-  const prefix = process.env.S3_RECEIPT_PREFIX ?? 'receipts';
-  const endpoint = process.env.S3_ENDPOINT;
-  const forcePathStyle = process.env.S3_FORCE_PATH_STYLE === 'true';
-  const publicUrlTemplate = process.env.S3_PUBLIC_URL_TEMPLATE;
+  const { bucket, region, prefix, endpoint, forcePathStyle, publicUrlTemplate } = s3;
   const { S3Client, PutObjectCommand, GetObjectCommand } = await import('@aws-sdk/client-s3');
   const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
 
@@ -120,15 +118,19 @@ async function createS3Storage(): Promise<ReceiptStorage> {
 }
 
 async function createGcsStorage(): Promise<ReceiptStorage> {
-  const bucketName = process.env.GCS_BUCKET;
-  if (!bucketName) {
-    throw new Error('GCS_BUCKET is required when using the gcs receipt storage provider.');
+  const {
+    receipts: { storage },
+  } = getConfig();
+
+  const gcs = storage.gcs;
+  if (!gcs) {
+    throw new Error('GCS receipt storage is not configured. Set GCS_BUCKET to enable it.');
   }
-  const prefix = process.env.GCS_RECEIPT_PREFIX ?? 'receipts';
-  const publicUrlTemplate = process.env.GCS_PUBLIC_URL_TEMPLATE;
+
+  const { bucket: bucketName, prefix, publicUrlTemplate } = gcs;
   const { Storage } = await import('@google-cloud/storage');
-  const storage = new Storage();
-  const bucket = storage.bucket(bucketName);
+  const storageClient = new Storage();
+  const bucket = storageClient.bucket(bucketName);
 
   return {
     async upload(options: UploadReceiptOptions) {
@@ -186,20 +188,16 @@ const normalizeDriveCredentials = (json: string): GoogleDriveCredentials => {
 };
 
 async function createGoogleDriveStorage(): Promise<ReceiptStorage> {
-  const folderId = process.env.GDRIVE_FOLDER_ID;
-  if (!folderId) {
-    throw new Error('GDRIVE_FOLDER_ID is required when using the gdrive receipt storage provider.');
+  const {
+    receipts: { storage },
+  } = getConfig();
+
+  const gdrive = storage.gdrive;
+  if (!gdrive) {
+    throw new Error('Google Drive receipt storage is not configured. Set GDRIVE_FOLDER_ID to enable it.');
   }
 
-  const scopesEnv = process.env.GDRIVE_SCOPES;
-  const scopes = scopesEnv
-    ? scopesEnv
-        .split(',')
-        .map((value) => value.trim())
-        .filter((value) => value.length > 0)
-    : ['https://www.googleapis.com/auth/drive.file'];
-
-  const credentialsJson = process.env.GDRIVE_CREDENTIALS_JSON;
+  const { folderId, scopes, credentialsJson } = gdrive;
   const credentials = credentialsJson ? normalizeDriveCredentials(credentialsJson) : undefined;
 
   const driveModule = await import('@googleapis/drive');
@@ -271,8 +269,11 @@ let cachedStorage: Promise<ReceiptStorage> | null = null;
 
 export const getReceiptStorage = async (): Promise<ReceiptStorage> => {
   if (!cachedStorage) {
-    const provider = (process.env.RECEIPT_STORAGE_PROVIDER ?? 'memory').toLowerCase();
-    switch (provider) {
+    const {
+      receipts: { storage },
+    } = getConfig();
+
+    switch (storage.provider) {
       case 's3':
         cachedStorage = createS3Storage();
         break;
@@ -286,7 +287,7 @@ export const getReceiptStorage = async (): Promise<ReceiptStorage> => {
         cachedStorage = Promise.resolve(new MemoryReceiptStorage());
         break;
       default:
-        throw new Error(`Unsupported receipt storage provider: ${provider}`);
+        throw new Error(`Unsupported receipt storage provider: ${storage.provider}`);
     }
   }
 
@@ -295,6 +296,7 @@ export const getReceiptStorage = async (): Promise<ReceiptStorage> => {
 
 export const resetReceiptStorageCache = () => {
   cachedStorage = null;
+  resetConfigCache();
 };
 
 export const RECEIPT_ALLOWED_MIME_PREFIXES = ['image/'];
