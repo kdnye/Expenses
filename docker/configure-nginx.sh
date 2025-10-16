@@ -26,7 +26,7 @@ server {
     }
 
     # Service workers should not be aggressively cached to ensure updates roll out.
-    location = /service-worker.js {
+    location = /sw.js {
         add_header Cache-Control "no-store" always;
     }
 }

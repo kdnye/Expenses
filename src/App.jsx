@@ -84,11 +84,16 @@ const App = () => {
   }, []);
 
   const [state, setState] = useState(initialState);
+  const stateRef = useRef(state);
   const [submissionFeedback, setSubmissionFeedback] = useState({ message: '', variant: 'info' });
   const [submitting, setSubmitting] = useState(false);
   const [copyFeedback, showCopyFeedback] = useCopyFeedback();
   const pendingReceiptsRef = useRef(new Map());
   const [receiptStatusMap, setReceiptStatusMap] = useState({});
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const persistState = useCallback(
     (updater, options = { mode: 'draft' }) => {
@@ -336,15 +341,16 @@ const App = () => {
 
   const uploadPendingReceipts = useCallback(
     async (expenses, reportId) => {
-      let nextExpenses = expenses;
-      for (let index = 0; index < expenses.length; index += 1) {
-        const expense = expenses[index];
+      const uploadPromises = expenses.map((expense) => {
         if (pendingReceiptsRef.current.get(expense.id)?.length) {
-          const uploaded = await uploadReceiptsForExpense(expense, reportId);
-          nextExpenses = nextExpenses.map((item) => (item.id === expense.id ? uploaded : item));
+          return uploadReceiptsForExpense(expense, reportId);
         }
-      }
-      if (nextExpenses !== expenses) {
+        return expense;
+      });
+
+      const nextExpenses = await Promise.all(uploadPromises);
+
+      if (nextExpenses.some((item, index) => item !== expenses[index])) {
         persistState((prev) => ({ ...prev, expenses: nextExpenses }));
       }
       return nextExpenses;
@@ -355,8 +361,9 @@ const App = () => {
   const finalizeSubmit = useCallback(async () => {
     if (submitting) return;
 
-    const evaluatedExpenses = evaluateAllExpenses(state.expenses, state.header);
-    let workingState = saveState({ ...state, expenses: evaluatedExpenses });
+    const currentState = stateRef.current;
+    const evaluatedExpenses = evaluateAllExpenses(currentState.expenses, currentState.header);
+    let workingState = saveState({ ...currentState, expenses: evaluatedExpenses });
     setState(workingState);
 
     const duplicate = workingState.history?.some((entry) => entry.reportId === workingState.meta?.draftId);
@@ -476,12 +483,7 @@ const App = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [
-    submitting,
-    state,
-    hasPendingReceiptUploads,
-    uploadPendingReceipts,
-  ]);
+  }, [submitting, hasPendingReceiptUploads, uploadPendingReceipts, stateRef]);
 
   return (
     <>

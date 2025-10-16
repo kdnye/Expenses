@@ -19,7 +19,12 @@ WORKDIR /frontend
 COPY package.json package-lock.json ./
 COPY server/package.json server/package-lock.json ./server/
 RUN npm ci
-COPY . .
+COPY index.html ./
+COPY admin.html ./
+COPY vite.config.js ./
+COPY styles.css ./
+COPY public ./public
+COPY src ./src
 RUN npm run build
 
 FROM node:20-bookworm-slim AS prod-deps
@@ -37,10 +42,6 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY server/prisma ./prisma
 COPY --from=frontend /frontend/dist ./public
-COPY styles.css ./public/styles.css
-COPY admin.html ./admin.html
-COPY src ./src
-COPY src ./public/src
 
 RUN chown -R node:node /app
 USER node
