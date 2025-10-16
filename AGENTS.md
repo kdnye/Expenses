@@ -4,7 +4,7 @@ These are lightweight, practical rules for contributing and maintaining this rep
 
 ## 1) Code Style
 
-* Prefer **Python 3.11+**.
+* Prefer **Python 3.11+, react, js, rust.**
 * Format with **black** (line length 88). Organize imports with **isort**. Lint with **ruff** (or flake8). Type check with **mypy** on new/changed modules.
 * 4-space indentation. Docstrings use Google-style or reST—be consistent.
 * Keep modules small and single-purpose (parser, loader, model, service, api).
