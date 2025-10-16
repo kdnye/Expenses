@@ -1,1 +1,41 @@
+services:
+  api:
+    image: node:20-bookworm-slim
+    working_dir: /workspace
+    entrypoint: ["./docker/dev-entrypoint.sh"]
+    command: []
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      API_KEY: ${API_KEY:-local-dev-api-key}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-dev-admin-secret}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-expenses}?schema=public
+    env_file:
+      - .env
+    volumes:
+      - .:/workspace
+      - server-node-modules:/workspace/server/node_modules
+    depends_on:
+      - db
+    restart: unless-stopped
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-expenses}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
 
+volumes:
+  postgres-data:
+  server-node-modules:
